@@ -37,21 +37,21 @@ public class ItemDrop extends Movable
 
         if (Game.enable3d && Game.enable3dBg && Game.fancyTerrain)
         {
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX - size / 2, this.posY - size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX + size / 2, this.posY - size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX - size / 2, this.posY + size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX + size / 2, this.posY + size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX, this.posY + size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX, this.posY - size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX - size / 2, this.posY));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX + size / 2, this.posY));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX, this.posY));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX - size / 2, this.posY - size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX + size / 2, this.posY - size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX - size / 2, this.posY + size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX + size / 2, this.posY + size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX, this.posY + size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX, this.posY - size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX - size / 2, this.posY));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX + size / 2, this.posY));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX, this.posY));
         }
     }
 
     public static int nextFreeNetworkID()
     {
-        if (freeIDs.size() > 0)
+        if (!freeIDs.isEmpty())
             return freeIDs.remove(0);
         else
         {
@@ -116,17 +116,16 @@ public class ItemDrop extends Movable
                 Drawing.drawing.setColor(255 * i / 8.0, 255 * i / 8.0, 255 * i / 8.0, 255, 0.5);
                 Drawing.drawing.drawImage("item.png", this.posX, this.posY, this.height + i, size, size);
             }
-
-            Drawing.drawing.drawImage(this.item.item.icon, px, py, pz, s / 2, s / 2);
+            this.item.item.icon.drawImage(px, py, pz,s / 2, s / 2);
         }
         else
         {
             Drawing.drawing.setColor(255, 255, 255, 255, 0.5);
             Drawing.drawing.drawImage("item.png", this.posX, this.posY, this.height, size, size);
-            Drawing.drawing.drawImage(this.item.item.icon, px, py, s / 2, s / 2);
+            this.item.item.icon.drawImage(px, py, s / 2, s / 2);
         }
 
-        if (Game.showTankIDs)
+        if (Game.showNetworkIDs)
         {
             Drawing.drawing.setColor(0, 0, 0);
             Drawing.drawing.setFontSize(30);
@@ -148,20 +147,20 @@ public class ItemDrop extends Movable
         }
         else
         {
-            for (Movable m: Game.movables)
+            for (Movable m: Movable.getMovablesInRadius(this.posX, this.posY, this.size))
             {
-                if (m instanceof IServerPlayerTank && Movable.distanceBetween(this, m) < this.size)
-                {
-                    boolean added = ((IServerPlayerTank) m).getPlayer().hotbar.itemBar.addItem(this.item);
+                if (!(m instanceof IServerPlayerTank))
+                    continue;
 
-                    if (added)
-                    {
-                        this.pickup = (Tank) m;
-                        this.destroy = true;
-                        Game.eventsOut.add(new EventItemPickup(this, this.pickup));
-                        this.unregisterNetworkID();
-                        Drawing.drawing.playSound("bullet_explode.ogg", 1.6f);
-                    }
+                boolean added = ((IServerPlayerTank) m).getPlayer().hotbar.itemBar.addItem(this.item);
+
+                if (added)
+                {
+                    this.pickup = (Tank) m;
+                    this.destroy = true;
+                    Game.eventsOut.add(new EventItemPickup(this, this.pickup));
+                    this.unregisterNetworkID();
+                    Drawing.drawing.playSound("bullet_explode.ogg", 1.6f);
                 }
             }
         }

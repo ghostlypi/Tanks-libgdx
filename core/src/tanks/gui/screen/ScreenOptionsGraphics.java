@@ -22,6 +22,7 @@ public class ScreenOptionsGraphics extends Screen
 
     public static final String birdsEyeText = "\u00A7000100200255bird's-eye";
     public static final String angledText = "\u00A7200100000255angled";
+    public static final String orthographicText = "\u00A7100000200255orthographic";
 
     public static int viewNo = 0;
 
@@ -36,12 +37,7 @@ public class ScreenOptionsGraphics extends Screen
             terrain.setText(terrainText, fastText);
 
         if (Game.bulletTrails)
-        {
-            if (Game.fancyBulletTrails)
-                bulletTrails.setText(trailsText, fancyText);
-            else
-                bulletTrails.setText(trailsText, fastText);
-        }
+            bulletTrails.setText(trailsText, ScreenOptions.onText);
         else
             bulletTrails.setText(trailsText, ScreenOptions.offText);
 
@@ -61,31 +57,18 @@ public class ScreenOptionsGraphics extends Screen
         {
             case 0:
                 altPerspective.setText(perspectiveText, birdsEyeText);
-
-                Game.angledView = false;
-                Game.followingCam = false;
-                Game.firstPerson = false;
                 break;
             case 1:
                 altPerspective.setText(perspectiveText, angledText);
-
-                Game.angledView = true;
-                Game.followingCam = false;
-                Game.firstPerson = false;
                 break;
             case 2:
-                altPerspective.setText(perspectiveText, "\u00a7200000000255third person");
-
-                Game.angledView = false;
-                Game.followingCam = true;
-                Game.firstPerson = false;
+                altPerspective.setText(perspectiveText, orthographicText);
                 break;
             case 3:
+                altPerspective.setText(perspectiveText, "\u00a7200000000255third person");
+                break;
+            case 4:
                 altPerspective.setText(perspectiveText, "\u00a7255000000255first person");
-
-                Game.angledView = false;
-                Game.followingCam = true;
-                Game.firstPerson = true;
                 break;
         }
 
@@ -113,12 +96,12 @@ public class ScreenOptionsGraphics extends Screen
         if (!Game.shadowsEnabled)
             shadows.setText("Shadows: ", ScreenOptions.offText);
         else
-            shadows.setText("Shadow quality: %s", (Object)("\u00A7000200000255" + Game.shadowQuality));
+            shadows.setText("Shadow quality: ", "\u00A7000200000255" + Game.shadowQuality);
 
         if (!Game.effectsEnabled)
             effects.setText("Particle effects: ", ScreenOptions.offText);
         else if (Game.effectMultiplier < 1)
-            effects.setText("Particle effects: %s", (Object)("\u00A7200100000255" + (int) Math.round(Game.effectMultiplier * 100) + "%"));
+            effects.setText("Particle effects: ", "\u00A7200100000255" + (int) Math.round(Game.effectMultiplier * 100) + "%");
         else
             effects.setText("Particle effects: ", ScreenOptions.onText);
 
@@ -128,15 +111,15 @@ public class ScreenOptionsGraphics extends Screen
             tankTextures.setText(tankTexturesText, ScreenOptions.offText);
 
         if (Game.vsync)
-            maxFPS.setText("Max FPS: \u00A7200100000255V-Sync");
+            maxFPS.setText("Max FPS: ", "\u00A7200100000255V-Sync");
         else if (Game.maxFPS > 0)
-            maxFPS.setText("Max FPS: %s", (Object)("\u00A7000200000255" + Game.maxFPS));
+            maxFPS.setText("Max FPS: ", "\u00A7000200000255" + Game.maxFPS);
         else
-            maxFPS.setText("Max FPS: \u00A7000100200255unlimited");
+            maxFPS.setText("Max FPS: ", "\u00A7000100200255unlimited");
 
         if (Game.deterministicMode)
         {
-            maxFPS.setText("Max FPS: %s", (Object) ("\u00A7000200000255" + 60));
+            maxFPS.setText("Max FPS: %s", "\u00A7000200000255" + 60);
             maxFPS.enabled = false;
             maxFPS.setHoverText("Maximum framerate is locked to 60---because of deterministic mode");
         }
@@ -200,27 +183,14 @@ public class ScreenOptionsGraphics extends Screen
         @Override
         public void run()
         {
-            if (!Game.bulletTrails)
-                Game.bulletTrails = true;
-            else if (!Game.fancyBulletTrails)
-                Game.fancyBulletTrails = true;
-            else
-            {
-                Game.fancyBulletTrails = false;
-                Game.bulletTrails = false;
-            }
+            Game.bulletTrails = !Game.bulletTrails;
 
             if (Game.bulletTrails)
-            {
-                if (Game.fancyBulletTrails)
-                    bulletTrails.setText(trailsText, fancyText);
-                else
-                    bulletTrails.setText(trailsText, fastText);
-            }
+                bulletTrails.setText(trailsText, ScreenOptions.onText);
             else
                 bulletTrails.setText(trailsText, ScreenOptions.offText);
         }
-    }, "Bullet trails show the paths of bullets------Fancy bullet trails enable some extra particle---effects for certain bullet types");
+    }, "Bullet trails show the paths of bullets");
 
     Button glow = new Button(this.centerX - this.objXSpace / 2, this.centerY - this.objYSpace * 0.5, this.objWidth, this.objHeight, "", new Runnable()
     {
@@ -281,43 +251,7 @@ public class ScreenOptionsGraphics extends Screen
         @Override
         public void run()
         {
-            viewNo = (viewNo + 1);
-            if (!Game.debug)
-                viewNo = viewNo % 2;
-            else
-                viewNo = viewNo % 4;
-
-            switch (viewNo)
-            {
-                case 0:
-                    altPerspective.setText(perspectiveText, birdsEyeText);
-
-                    Game.angledView = false;
-                    Game.followingCam = false;
-                    Game.firstPerson = false;
-                    break;
-                case 1:
-                    altPerspective.setText(perspectiveText, angledText);
-
-                    Game.angledView = true;
-                    Game.followingCam = false;
-                    Game.firstPerson = false;
-                    break;
-                case 2:
-                    altPerspective.setText(perspectiveText, "\u00a7200000000255third person");
-
-                    Game.angledView = false;
-                    Game.followingCam = true;
-                    Game.firstPerson = false;
-                    break;
-                case 3:
-                    altPerspective.setText(perspectiveText, "\u00a7255000000255first person");
-
-                    Game.angledView = false;
-                    Game.followingCam = true;
-                    Game.firstPerson = true;
-                    break;
-            }
+           Game.screen = new ScreenSelectPerspective();
         }
     },
             "Changes the angle at which---you view the game field");

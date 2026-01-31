@@ -11,7 +11,7 @@ buildscript {
     }
     dependencies {
         classpath "org.docstr:gwt-gradle-plugin:1.1.29"
-        classpath 'org.gretty:gretty:3.0.2'
+        classpath 'org.gretty:gretty:4.1.5'
         classpath 'com.android.tools.build:gradle:8.5.0'
         classpath 'com.mobidevelop.robovm:robovm-gradle-plugin:2.3.12'
     }

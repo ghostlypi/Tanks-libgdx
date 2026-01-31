@@ -18,7 +18,9 @@ import java.util.UUID;
 
 public class ScreenPartyLobby extends Screen
 {
+    public static boolean muted = false;
 	public static ArrayList<ConnectedPlayer> connections = new ArrayList<>();
+	public static int connectedBots = 0;
 	public static boolean isClient = false;
 	public static ArrayList<UUID> includedPlayers = new ArrayList<>();
 	public static ArrayList<ConnectedPlayer> readyPlayers = new ArrayList<>();
@@ -46,9 +48,7 @@ public class ScreenPartyLobby extends Screen
 
 		this.music = "menu_4.ogg";
 		this.musicID = "menu";
-
-		ScreenPartyLobby.chatbox = new ChatBox(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.getInterfaceEdgeY(true) - 30, Drawing.drawing.interfaceSizeX - 20, 40, Game.game.input.chat, () -> Game.eventsOut.add(new EventChat(ScreenPartyLobby.chatbox.inputText)));
-	}
+    }
 
 	Button exit = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2 + 270, this.objWidth, this.objHeight, "Leave party", () -> Game.screen = new ScreenConfirmLeaveParty());
 	Button options = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2 + 210, this.objWidth, this.objHeight, "Options", () -> Game.screen = new ScreenOptions());
@@ -76,7 +76,7 @@ public class ScreenPartyLobby extends Screen
 		if (this.usernamePage > 0)
 			this.previousUsernamePage.update();
 
-		if ((this.usernamePage + 1) * 10 < connections.size())
+		if ((this.usernamePage + 1) * entries_per_page < connections.size() - 1)
 			this.nextUsernamePage.update();
 
 		share.update();
@@ -115,16 +115,22 @@ public class ScreenPartyLobby extends Screen
 
 		Drawing.drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2 - 270, title);
 
-		Drawing.drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2 + username_x_offset, Drawing.drawing.interfaceSizeY / 2 - 220, "Players in this party:");
+		if (connections != null && connections.size() > 1)
+			Drawing.drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2 + username_x_offset, Drawing.drawing.interfaceSizeY / 2 - 220, "%d players in this party:", connections.size());
+		else
+			Drawing.drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2 + username_x_offset, Drawing.drawing.interfaceSizeY / 2 - 220, "1 player in this party:");
+
 
 		Drawing.drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2 + 190, Drawing.drawing.interfaceSizeY / 2 - 220, "Level and crusade sharing:");
 
 		if (connections != null)
 		{
+			this.usernamePage = Math.min(this.usernamePage, (connections.size() - 2) / 10);
+
 			if (this.usernamePage > 0)
 				this.previousUsernamePage.draw();
 
-			if ((this.usernamePage + 1) * entries_per_page < connections.size())
+			if ((this.usernamePage + 1) * entries_per_page < connections.size() - 1)
 				this.nextUsernamePage.draw();
 
 
@@ -151,7 +157,7 @@ public class ScreenPartyLobby extends Screen
 						Drawing.drawing.setColor(0, 0, 0);
 						Drawing.drawing.drawInterfaceText(Drawing.drawing.interfaceSizeX / 2 + username_x_offset, y, n);
 
-						Tank.drawTank(this.centerX - Drawing.drawing.getStringWidth(n) / 2 - 230, y, c.colorR, c.colorG, c.colorB, c.colorR2, c.colorG2, c.colorB2, c.colorR3, c.colorG3, c.colorB3);
+						Tank.drawTank(this.centerX - Drawing.drawing.getStringWidth(n) / 2 - 230, y, c.color, c.color2, c.color3);
 					}
 				}
 			}

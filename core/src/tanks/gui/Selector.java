@@ -6,6 +6,7 @@ import basewindow.InputPoint;
 import tanks.*;
 import tanks.gui.screen.ScreenInfo;
 import tanks.gui.screen.ScreenSelector;
+import tanks.item.ItemIcon;
 import tanks.translation.Translation;
 
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class Selector implements IDrawable, ITrigger
     public double hoverColorR = 240;
     public double hoverColorG = 240;
     public double hoverColorB = 255;
+    public boolean manualDarkMode = false;
 
     public long lastFrame;
     public double effectTimer;
@@ -53,6 +55,7 @@ public class Selector implements IDrawable, ITrigger
     public String[] sounds;
     public String[] images;
     public IModel[] models;
+    public ItemIcon[] itemIcons;
 
     public boolean quick = false;
 
@@ -213,6 +216,12 @@ public class Selector implements IDrawable, ITrigger
             Drawing.drawing.drawInterfaceImage(images[selectedOption], this.posX - this.sizeX / 2 + this.sizeY / 2 + 10, this.posY, this.sizeY, this.sizeY);
         }
 
+        if (itemIcons != null)
+        {
+            Drawing.drawing.setColor(255, 255, 255);
+            Drawing.drawing.drawInterfaceImage(itemIcons[selectedOption], this.posX - this.sizeX / 2 + this.sizeY / 2 + 10, this.posY, this.sizeY, this.sizeY);
+        }
+
         if (models != null)
         {
             Drawing.drawing.setColor(255, 255, 255);
@@ -230,11 +239,13 @@ public class Selector implements IDrawable, ITrigger
         if (format)
             s = Game.formatString(s);
 
+        String t = translate ? Translation.translate(s) : s;
 
-        if (translate)
-            Drawing.drawing.drawInterfaceText(posX, posY, Translation.translate(s));
-        else
-            Drawing.drawing.drawInterfaceText(posX, posY, s);
+        double size = this.sizeY * 0.6;
+        if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, t) / Drawing.drawing.interfaceScale > this.sizeX - 80)
+            Drawing.drawing.setInterfaceFontSize(size * (this.sizeX - 80) / (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, t) / Drawing.drawing.interfaceScale));
+
+        Drawing.drawing.drawInterfaceText(posX, posY, t);
     }
 
     public void update()
@@ -362,14 +373,16 @@ public class Selector implements IDrawable, ITrigger
     {
         this.resetLayout();
         ScreenSelector s = new ScreenSelector(this, Game.screen);
-        s.images = this.images;
-        s.models = this.models;
+        s.buttonList.manualDarkMode = this.manualDarkMode;
 
         if (this.images != null)
             s.drawImages = true;
 
         if (this.models != null)
             s.drawModels = true;
+
+        if (this.itemIcons != null)
+            s.drawItemIcons = true;
 
         s.drawBehindScreen = this.drawBehindScreen;
         Game.screen = s;
@@ -387,6 +400,18 @@ public class Selector implements IDrawable, ITrigger
     {
         this.posX = x;
         this.posY = y;
+    }
+
+    @Override
+    public double getPositionX()
+    {
+        return this.posX;
+    }
+
+    @Override
+    public double getPositionY()
+    {
+        return this.posY;
     }
 
     public void setText(String text)

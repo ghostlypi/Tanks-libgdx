@@ -13,13 +13,18 @@ import tanks.gui.ChatMessage;
 import tanks.gui.screen.ScreenPartyHost;
 import tanks.network.event.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.UUID;
 
 public class ServerHandler extends ChannelInboundHandlerAdapter
 {
 	public MessageReader reader = new MessageReader();
-	public SynchronizedList<INetworkEvent> events = new SynchronizedList<>();
+
+	protected ArrayList<Integer> queuedEventIndices = new ArrayList<>();
+	protected ArrayList<INetworkEvent> queuedEvents = new ArrayList<>();
+
+	protected SynchronizedList<INetworkEvent> events = new SynchronizedList<>();
 	protected HashMap<Integer, IStackableEvent> stackedEvents = new HashMap<>();
 	protected long lastStackedEventSend = 0;
 
@@ -39,6 +44,7 @@ public class ServerHandler extends ChannelInboundHandlerAdapter
 	public long lastLatency;
 	public boolean pingReceived = true;
 
+	public boolean joined = false;
 	public boolean closed = false;
 
 	public ServerHandler(Server s)
@@ -50,6 +56,9 @@ public class ServerHandler extends ChannelInboundHandlerAdapter
 	public void channelActive(ChannelHandlerContext ctx)
 	{
 		this.ctx = ctx;
+
+		if (ctx != null && !Game.enableIPConnections)
+			this.sendEventAndClose(new EventKick("This party is not accepting new players connecting by IP address"));
 
 		if (ctx != null)
 			this.reader.queue = ctx.channel().alloc().buffer();
@@ -88,6 +97,44 @@ public class ServerHandler extends ChannelInboundHandlerAdapter
 //		{
 //			System.out.println(s + ": " + eventFrequencies.get(s));
 //		}
+	}
+
+	/**
+	 * Queues an event to be added, to be sent exactly after all the events currently
+	 * in Game.eventsOut
+	 * @param e
+	 */
+	public void queueEvent(INetworkEvent e)
+	{
+		this.queuedEvents.add(e);
+		this.queuedEventIndices.add(Game.eventsOut.size());
+	}
+
+	public void addEvents(ArrayList<INetworkEvent> events)
+	{
+		synchronized (this.events)
+		{
+			int j = 0;
+			for (int i = 0; i < events.size(); i++)
+			{
+				while (j < this.queuedEventIndices.size() && this.queuedEventIndices.get(j) == i)
+				{
+					this.events.add(this.queuedEvents.get(j));
+					j++;
+				}
+
+				this.events.add(events.get(i));
+			}
+
+			while (j < this.queuedEventIndices.size())
+			{
+				this.events.add(this.queuedEvents.get(j));
+				j++;
+			}
+
+			this.queuedEvents.clear();
+			this.queuedEventIndices.clear();
+		}
 	}
 
 	@Override
@@ -166,8 +213,11 @@ public class ServerHandler extends ChannelInboundHandlerAdapter
 
 	public synchronized void sendEvent(INetworkEvent e, boolean flush)
 	{
-		eventFrequencies.putIfAbsent(e.getClass().getSimpleName(), 0);
-		eventFrequencies.put(e.getClass().getSimpleName(), eventFrequencies.get(e.getClass().getSimpleName()) + 1);
+        String n = e.getClass().getSimpleName();
+        if (!eventFrequencies.containsKey(n))
+    		eventFrequencies.put(n, 0);
+
+		eventFrequencies.put(n, eventFrequencies.get(n) + 1);
 
 		if (steamID != null)
 		{

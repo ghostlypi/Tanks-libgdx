@@ -5,14 +5,7 @@ import tanks.tank.Tank;
 
 public class ItemRemote extends Item
 {
-    public int bounces;
-
-    public double lifespan;
-    public double rangeMin;
-    public double rangeMax;
-    public boolean showTrace;
-
-    public boolean hideShootStick = false;
+    public Item item;
 
     @Override
     public ItemStack<?> getStack(Player p)
@@ -20,7 +13,7 @@ public class ItemRemote extends Item
         return new ItemStackRemote(p, this, 0);
     }
 
-    public static class ItemStackRemote extends Item.ItemStack<ItemRemote>
+    public static class ItemStackRemote extends ItemStack<ItemRemote>
     {
         public ItemStackRemote(Player p, ItemRemote item, int max)
         {

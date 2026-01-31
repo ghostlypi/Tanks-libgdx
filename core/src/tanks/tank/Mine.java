@@ -1,33 +1,29 @@
 package tanks.tank;
 
+import basewindow.Color;
 import tanks.*;
-import tanks.gui.IFixedMenu;
-import tanks.gui.Scoreboard;
-import tanks.gui.screen.ScreenEditorBullet;
-import tanks.gui.screen.ScreenEditorMine;
 import tanks.gui.screen.ScreenPartyLobby;
 import tanks.item.ItemMine;
 import tanks.network.event.EventMineChangeTimer;
 import tanks.network.event.EventMineRemove;
 import tanks.tankson.*;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 
 @TanksONable("mine")
-public class Mine extends Movable implements IAvoidObject, IDrawableLightSource, ICopyable<Mine>, ITanksONEditable
+public class Mine extends Movable implements IAvoidObject, ICopyable<Mine>, ITanksONEditable
 {
     public static double mine_size = 30;
     public static double mine_radius = Game.tile_size * 2.25;
 
-    @Property(id = "explosion", name = "Explosion")
+    @Property(id = "explosion", name = "Explosion", category = MinePropertyCategory.mine)
     public Explosion explosion = new Explosion();
 
-    @Property(id = "timer", name = "Fuse length", desc = "The mine will explode this much time after it is placed \n \n 1 time unit = 0.01 seconds")
+    @Property(id = "timer", name = "Fuse length", desc = "The mine will explode this much time after it is placed \n \n 1 time unit = 0.01 seconds", category = MinePropertyCategory.mine)
     public double timer = 1000;
 
-    @Property(id = "size", name = "Size")
+    @Property(id = "size", name = "Size", category = MinePropertyCategory.mine)
     public double size = mine_size;
 
     public double outlineColorR;
@@ -35,15 +31,21 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
     public double outlineColorB;
     public double height = 0;
 
-    @Property(id = "triggered_timer", name = "Triggered fuse length", desc = "If an enemy tank is within this mine's radius, its fuse will be shortened to this length \n \n 1 time unit = 0.01 seconds")
+    @Property(id = "triggered_timer", name = "Triggered fuse length", desc = "If an enemy tank is within this mine's radius, its fuse will be shortened to this length \n \n 1 time unit = 0.01 seconds", category = MinePropertyCategory.mine)
     public double triggeredTimer = 50;
 
     public Tank tank;
     public ItemMine.ItemStackMine item;
     public int lastBeep = Integer.MAX_VALUE;
 
-    @Property(id = "max_live_mines", name = "Max live mines", desc = "The maximum number of this mine placed by one tank that can be onscreen at a time")
+    @Property(id = "max_live_mines", name = "Max live mines", desc = "The maximum number of this mine placed by one tank that can be onscreen at a time", category = MinePropertyCategory.mine)
     public int maxLiveMines = 2;
+
+    @Property(id = "color", name = "Initial color", miscType = Property.MiscType.colorRGB, category = MinePropertyCategory.colors)
+    public Color initialColor = new Color(255, 255, 0);
+
+    @Property(id = "color2", name = "Final color", miscType = Property.MiscType.colorRGB, category = MinePropertyCategory.colors)
+    public Color finalColor = new Color(255, 0, 0);
 
     public int networkID = -1;
 
@@ -81,7 +83,7 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
         }
 
         this.team = t.team;
-        double[] outlineCol = Team.getObjectColor(t.colorR, t.colorG, t.colorB, t);
+        double[] outlineCol = Team.getObjectColor(t.color.red, t.color.green, t.color.blue, t);
         this.outlineColorR = outlineCol[0];
         this.outlineColorG = outlineCol[1];
         this.outlineColorB = outlineCol[2];
@@ -98,21 +100,6 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
 
             idMap.put(this.networkID, this);
         }
-
-        for (IFixedMenu m : ModAPI.menuGroup)
-        {
-            if (m instanceof Scoreboard && ((Scoreboard) m).objectiveType.equals(Scoreboard.objectiveTypes.mines_placed))
-            {
-                if (((Scoreboard) m).players.isEmpty())
-                    ((Scoreboard) m).addTeamScore(this.team, 1);
-
-                else if (this.tank instanceof TankPlayer)
-                    ((Scoreboard) m).addPlayerScore(((TankPlayer) this.tank).player, 1);
-
-                else if (this.tank instanceof TankPlayerRemote)
-                    ((Scoreboard) m).addPlayerScore(((TankPlayerRemote) this.tank).player, 1);
-            }
-        }
     }
 
     public Mine(double x, double y, Tank t, ItemMine.ItemStackMine im)
@@ -127,10 +114,10 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
 
         if (Game.enable3d && Game.enable3dBg && Game.fancyTerrain)
         {
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX - this.size / 2, this.posY - this.size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX + this.size / 2, this.posY - this.size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX - this.size / 2, this.posY + this.size / 2));
-            this.height = Math.max(this.height, Game.sampleTerrainGroundHeight(this.posX + this.size / 2, this.posY + this.size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX - this.size / 2, this.posY - this.size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX + this.size / 2, this.posY - this.size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX - this.size / 2, this.posY + this.size / 2));
+            this.height = Math.max(this.height, Game.sampleGroundHeight(this.posX + this.size / 2, this.posY + this.size / 2));
         }
 
         if (Game.enable3d)
@@ -155,10 +142,13 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
                 Drawing.drawing.fillGlow(this.posX, this.posY, this.size * 4, this.size * 4);
         }
 
-        Drawing.drawing.setColor(255, Math.min(1000, this.timer) / 1000.0 * 255, 0, 255, 0.5);
+        double frac = Math.min(1000, this.timer) / 1000.0;
+        Drawing.drawing.setColor(this.initialColor.red * frac + this.finalColor.red * (1 - frac),
+            this.initialColor.green * frac + this.finalColor.green * (1 - frac),
+            this.initialColor.blue * frac + this.finalColor.blue * (1 - frac), 255, 0.5);
 
         if (timer < 150 && ((int) timer % 20) / 10 == 1)
-            Drawing.drawing.setColor(255, 255, 0, 255, 0.5);
+            Drawing.drawing.setColor(this.initialColor, 255, 0.5);
 
         if (Game.enable3d)
             Drawing.drawing.fillOval(this.posX, this.posY, this.posZ + height + 7.5, this.size * 0.8, this.size * 0.8, true, false);
@@ -200,21 +190,18 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
 
         boolean enemyNear = false;
         boolean allyNear = false;
-        for (Movable m: Game.movables)
+        for (Movable m: Explosion.getMovablesInExplosion(this.posX, this.posY, this.explosion.radius))
         {
-            if (Math.pow(Math.abs(m.posX - this.posX), 2) + Math.pow(Math.abs(m.posY - this.posY), 2) < Math.pow(this.explosion.radius, 2))
+            if (m instanceof Tank && !m.destroy && ((Tank) m).currentlyTargetable)
             {
-                if (m instanceof Tank && !m.destroy && ((Tank) m).targetable)
-                {
-                    if (Team.isAllied(m, this.tank))
-                        allyNear = true;
-                    else
-                        enemyNear = true;
-                }
+                if (Team.isAllied(m, this.tank))
+                    allyNear = true;
+                else
+                    enemyNear = true;
             }
         }
 
-        if (enemyNear && !allyNear && this.timer > this.triggeredTimer && !this.isRemote)
+        if (enemyNear && !allyNear && this.timer > this.triggeredTimer && !ScreenPartyLobby.isClient)
         {
             this.timer = this.triggeredTimer;
             Game.eventsOut.add(new EventMineChangeTimer(this));
@@ -225,6 +212,7 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
     {
         Game.eventsOut.add(new EventMineRemove(this));
         Game.removeMovables.add(this);
+        Game.avoidObjects.remove(this);
 
         if (!ScreenPartyLobby.isClient)
         {
@@ -290,7 +278,7 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
 
     public static void drawRange2D(double posX, double posY, double size, boolean inverted)
     {
-        int faces = (int) (size + 5);
+        int faces = Math.min((int) (size + 5), 10000);
         double r = Drawing.drawing.currentColorR;
         double g = Drawing.drawing.currentColorG;
         double b = Drawing.drawing.currentColorB;
@@ -318,21 +306,9 @@ public class Mine extends Movable implements IAvoidObject, IDrawableLightSource,
         Drawing.drawing.setColor(r, g, b, a);
     }
 
-    @Override
-    public boolean lit()
+    public double getSize()
     {
-        return Game.fancyLights;
-    }
-
-    @Override
-    public double[] getLightInfo()
-    {
-        this.lightInfo[3] = 2;
-
-        this.lightInfo[4] = this.outlineColorR;
-        this.lightInfo[5] = this.outlineColorG;
-        this.lightInfo[6] = this.outlineColorB;
-        return this.lightInfo;
+        return size;
     }
 
     @Override

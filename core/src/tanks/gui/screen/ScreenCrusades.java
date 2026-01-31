@@ -6,7 +6,7 @@ import tanks.Drawing;
 import tanks.Game;
 import tanks.gui.Button;
 import tanks.gui.SavedFilesList;
-import tanks.gui.SearchBox;
+import tanks.gui.SearchBoxInstant;
 import tanks.translation.Translation;
 
 import java.io.IOException;
@@ -20,7 +20,7 @@ public class ScreenCrusades extends Screen
 	public SavedFilesList fullCrusadesList;
 	public SavedFilesList crusadesList;
 
-	SearchBox search = new SearchBox(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
+	SearchBoxInstant search = new SearchBoxInstant(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
 	{
 		@Override
 		public void run()
@@ -214,7 +214,7 @@ public class ScreenCrusades extends Screen
 			Drawing.drawing.setColor(0, 0, 0);
 			Drawing.drawing.setInterfaceFontSize(24);
 
-			Drawing.drawing.drawInterfaceText(this.centerX, this.centerY, "No crusades found");
+			Drawing.drawing.displayInterfaceText(this.centerX, this.centerY, "No crusades found");
 		}
 
 		sort.draw();

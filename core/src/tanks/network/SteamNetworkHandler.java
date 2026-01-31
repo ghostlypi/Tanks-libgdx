@@ -4,14 +4,15 @@ import com.codedisaster.steamworks.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import tanks.Game;
-import tanks.gui.screen.ScreenConnecting;
-import tanks.gui.screen.ScreenPartyHost;
-import tanks.gui.screen.ScreenPartyLobby;
+import tanks.gui.Button;
+import tanks.gui.screen.*;
 import tanks.network.event.INetworkEvent;
 
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,6 +21,10 @@ public class SteamNetworkHandler
 	public boolean initialized = false;
 	protected SteamUtils clientUtils;
 	public int[] msgSize = new int[1];
+
+	public SteamID currentLobby = null;
+	public SteamResult lobbyHostStatus = null;
+	protected int lastPlayerCount = -1;
 
 	protected HashMap<Integer, Long> toClose = new HashMap<>();
 
@@ -35,6 +40,13 @@ public class SteamNetworkHandler
 
 	public FriendsMixin friends;
 	public SteamNetworking networking;
+	public SteamMatchmaking matchmaking;
+	public SteamWorkshopHandler workshop;
+	public SteamUser user;
+
+	protected ScreenJoinParty joinPartyScreen = null;
+
+	public SteamID playerID = null;
 
 	protected ByteBuffer packetReadBuffer = ByteBuffer.allocateDirect(readBufferCapacity);
 
@@ -63,17 +75,114 @@ public class SteamNetworkHandler
 		}
 	};
 
+	protected SteamMatchmakingCallback matchmakingCallback = new SteamMatchmakingCallback()
+	{
+		@Override
+		public void onLobbyCreated(SteamResult result, SteamID steamIDLobby)
+		{
+			if (result == SteamResult.OK)
+			{
+				currentLobby = steamIDLobby;
+				lastPlayerCount = 1;
+				matchmaking.setLobbyData(currentLobby, "players", "1");
+				matchmaking.setLobbyData(currentLobby, "host", Game.player.username);
+				try
+				{
+					Method m = Class.forName("com.codedisaster.steamworks.SteamUtilsNative").getDeclaredMethod("getIPCountry");
+					m.setAccessible(true);
+					matchmaking.setLobbyData(currentLobby, "country", m.invoke(null).toString());
+				}
+				catch (Exception e)
+				{
+					Game.exitToCrash(e);
+				}
+			}
+			else
+				lobbyHostStatus = result;
+		}
+
+		@Override
+		public void onLobbyEnter(SteamID steamIDLobby, int chatPermissions, boolean blocked, SteamMatchmaking.ChatRoomEnterResponse response)
+		{
+			if (response == SteamMatchmaking.ChatRoomEnterResponse.Success)
+				currentLobby = matchmaking.getLobbyOwner(steamIDLobby);
+		}
+
+		@Override
+		public void onLobbyMatchList(int lobbiesMatching)
+		{
+			ArrayList<Button> buttons = new ArrayList<>();
+			for (int i = 0; i < lobbiesMatching; i++)
+			{
+				SteamID lobby = matchmaking.getLobbyByIndex(i);
+				String playerCount = matchmaking.getLobbyData(lobby, "players");
+				String host = matchmaking.getLobbyData(lobby, "host");
+				String country = new Locale("en", matchmaking.getLobbyData(lobby, "country")).getDisplayCountry();
+				Button b = new Button(0, 0, 350, 40, "", () ->
+				{
+					String s1 = joinPartyScreen.ip.inputText;
+					joinPartyScreen.ip.inputText = "lobby:" + lobby;
+					joinPartyScreen.join.function.run();
+					joinPartyScreen.ip.inputText = s1;
+					Game.lastOfflineScreen = new ScreenJoinParty();
+				});
+				b.text = host;
+				if (playerCount.equals("1"))
+					b.setSubtext("%s - %s player", country, playerCount);
+				else
+					b.setSubtext("%s - %s players", country, playerCount);
+
+				buttons.add(b);
+			}
+
+			if (Game.screen instanceof ScreenWaitingLobbyList)
+				Game.screen = new ScreenJoinSteamLobby(joinPartyScreen, buttons);
+		}
+	};
+
+	protected SteamUserCallback userCallback = new SteamUserCallback()
+	{
+
+	};
+
 	protected void registerInterfaces()
 	{
 		friends = new FriendsMixin();
 		networking = new SteamNetworking(peer2peerCallback);
 		networking.allowP2PPacketRelay(true);
+		matchmaking = new SteamMatchmaking(matchmakingCallback);
+		workshop = new SteamWorkshopHandler(this);
+		user = new SteamUser(userCallback);
+		playerID = user.getSteamID();
 	}
 
 	protected void unregisterInterfaces()
 	{
 		friends.dispose();
 		networking.dispose();
+		matchmaking.dispose();
+		workshop.workshop.dispose();
+	}
+
+	public void hostParty()
+	{
+		currentLobby = null;
+		lobbyHostStatus = null;
+		matchmaking.createLobby(Game.steamVisibility, 250);
+	}
+
+	public void leaveParty()
+	{
+		if (currentLobby != null)
+		{
+			matchmaking.leaveLobby(currentLobby);
+			currentLobby = null;
+		}
+	}
+
+	public void joinParty(long id)
+	{
+		matchmaking.joinLobby(SteamID.createFromNativeHandle(id));
 	}
 
 	public void update()
@@ -94,6 +203,13 @@ public class SteamNetworkHandler
 							toClose.put(s.steamID.getAccountID(), System.currentTimeMillis());
 						}
 					}
+
+					int c = ScreenPartyHost.server.connections.size() + 1;
+					if (currentLobby != null && lastPlayerCount != c)
+					{
+						lastPlayerCount = c;
+						matchmaking.setLobbyData(currentLobby, "players", c + "");
+					}
 				}
 			}
 
@@ -110,8 +226,18 @@ public class SteamNetworkHandler
 			for (int i: remove)
 				toClose.remove(i);
 
+			Game.game.runningCallbacks = true;
 			SteamAPI.runCallbacks();
-			friends.updateFriends();
+
+			Game.game.runningCallbacks = false;
+			if (Game.game.callbackException != null)
+			{
+				Throwable t = Game.game.callbackException;
+				Game.game.callbackException = null;
+				Game.exitToCrash(t);
+			}
+
+			workshop.updateDownload();
 
 			while (networking.isP2PPacketAvailable(defaultChannel, msgSize))
 			{
@@ -127,6 +253,9 @@ public class SteamNetworkHandler
 					registerRemoteSteamID(steamIDSender);
 
 					int bytesReceived = packetReadBuffer.getInt();
+
+                    if (bytesReceived < 0)
+                        continue;
 
 					byte[] bytes = new byte[bytesReceived];
 					packetReadBuffer.get(bytes);
@@ -162,20 +291,23 @@ public class SteamNetworkHandler
 
 	public SteamID send(int target, INetworkEvent event, SteamNetworking.P2PSend type)
 	{
+		SteamID steamIDReceiver;
+
+		if (remoteUserIDs.containsKey(target))
+			steamIDReceiver = remoteUserIDs.get(target);
+		else if (friends.isFriendAccountID(target))
+			steamIDReceiver = friends.getFriendSteamID(target);
+		else
+			return null;
+
+		send(steamIDReceiver, event, type);
+		return steamIDReceiver;
+	}
+
+	public SteamID send(SteamID steamIDReceiver, INetworkEvent event, SteamNetworking.P2PSend type)
+	{
 		try
 		{
-			SteamID steamIDReceiver;
-
-			if (remoteUserIDs.containsKey(target))
-				steamIDReceiver = remoteUserIDs.get(target);
-			else if (friends.isFriendAccountID(target))
-				steamIDReceiver = friends.getFriendSteamID(target);
-			else
-			{
-				Game.exitToCrash(new RuntimeException(";("));
-				return null;
-			}
-
 			if (steamIDReceiver != null)
 			{
 				sendBuf.clear();
@@ -225,7 +357,11 @@ public class SteamNetworkHandler
 			if (steamIDRemote != null)
 			{
 				if (ScreenPartyHost.isServer)
-					serverHandlersBySteamID.get(remoteID).channelInactive(null);
+				{
+					ServerHandler h = serverHandlersBySteamID.get(remoteID);
+					if (h != null)
+						h.channelInactive(null);
+				}
 				else if (ScreenPartyLobby.isClient)
 					Client.handler.channelInactive(null);
 
@@ -251,6 +387,13 @@ public class SteamNetworkHandler
 		}
 
 		return true;
+	}
+
+	public void requestLobbies(ScreenJoinParty s)
+	{
+		this.joinPartyScreen = s;
+		this.matchmaking.addRequestLobbyListDistanceFilter(SteamMatchmaking.LobbyDistanceFilter.Worldwide);
+		this.matchmaking.requestLobbyList();
 	}
 
 	protected void registerRemoteSteamID(SteamID steamIDUser)
@@ -326,6 +469,8 @@ public class SteamNetworkHandler
 			}
 
 			this.initialized = true;
+			this.friends.updateFriends();
+
 			return true;
 		}
 		catch (SteamException e)

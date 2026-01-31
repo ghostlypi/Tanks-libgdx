@@ -1,5 +1,6 @@
 package tanks;
 
+import basewindow.Color;
 import basewindow.IBatchRenderableObject;
 import tanks.bullet.Bullet;
 import tanks.gui.screen.ScreenGame;
@@ -7,39 +8,34 @@ import tanks.minigames.Arcade;
 import tanks.obstacle.Obstacle;
 import tanks.rendering.TrackRenderer;
 import tanks.tank.Mine;
+import tanks.tank.Tank;
 import tanks.tank.Turret;
 
-public class Effect extends Movable implements IDrawableWithGlow, IDrawableLightSource, IBatchRenderableObject
+public class Effect extends Movable implements IDrawableWithGlow, IBatchRenderableObject
 {
-    public enum EffectType {fire, smokeTrail, trail, ray, explosion, laser, piece, obstaclePiece, obstaclePiece3d, charge, tread, darkFire, electric, healing, stun, bushBurn, glow, teleporterLight, teleporterPiece, interfacePiece, interfacePieceSparkle, snow, shield, boostLight, exclamation, chain, tutorialProgress}
+    public enum EffectType {fire, smokeTrail, trail, ray, blockMarker, circleMarker, explosion, laser, piece, obstaclePiece, obstaclePiece3d, charge, tread, darkFire, electric, healing, stun, bushBurn, glow, teleporterLight, interfacePiece, interfacePieceSparkle, snow, shield, boostLight, exclamation, chain, tutorialProgress}
 
     public enum State {live, removed, recycle}
 
     public EffectType type;
-    public double age = 0;
-    public double colR;
-    public double colG;
-    public double colB;
+    public Color color = new Color();
 
     public boolean force = false;
     public boolean enableGlow = true;
-    public double glowR;
-    public double glowG;
-    public double glowB;
+    public Color glowColor = new Color();
+    public double glowSize = 8;
+    public double luminance = 0.5;
+    public boolean glowy = true;
 
     public double maxAge = 100;
-    public double size;
-    public double radius;
-    public double angle;
-    public double distance;
+    public double size, radius, angle, distance;
 
-    public int prevGridX;
-    public int prevGridY;
+    public int prevGridX, prevGridY;
+    public int initialGridX, initialGridY;
+    public double gridHeight;
+    public Movable linkedMovable;
 
-    public int initialGridX;
-    public int initialGridY;
-
-    public double[] lightInfo = new double[7];
+    public static double timeSinceLastTrack = 0;
 
     //Effects that have this set to true are removed faster when the level has ended
     public boolean fastRemoveOnExit = false;
@@ -48,9 +44,9 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
     public static Effect createNewEffect(double x, double y, double z, EffectType type)
     {
-        while (Game.recycleEffects.size() > 0)
+        while (!Game.recycleEffects.isEmpty())
         {
-            Effect e = Game.recycleEffects.remove();
+            Effect e = Game.recycleEffects.poll();
 
             if (e.state == State.recycle)
             {
@@ -62,6 +58,13 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
         Effect e = new Effect();
         e.initialize(x, y, z, type);
+        return e;
+    }
+
+    public static Effect createNewEffect(double x, double y, double z, EffectType type, double age)
+    {
+        Effect e = Effect.createNewEffect(x, y, z, type);
+        e.age = age;
         return e;
     }
 
@@ -92,6 +95,9 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         this.initialGridX = this.prevGridX;
         this.initialGridY = this.prevGridY;
 
+        Chunk.Tile t = Chunk.getOrDefault(initialGridX, initialGridY);
+        this.gridHeight = Math.max(5, t.height());
+
         if (type == EffectType.fire)
             this.maxAge = 20;
         else if (type == EffectType.smokeTrail)
@@ -100,18 +106,26 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             this.maxAge = 50;
         else if (type == EffectType.ray)
             this.maxAge = 20;
+        else if (type == EffectType.blockMarker)
+            this.maxAge = 20;
+        else if (type == EffectType.circleMarker)
+            this.maxAge = 20;
         else if (type == EffectType.explosion)
         {
             this.maxAge = 20;
-            this.colR = 255;
-            this.colG = 0;
-            this.colB = 0;
+            this.color.set(255, 0, 0);
             this.force = true;
         }
         else if (type == EffectType.laser)
+        {
             this.maxAge = 21;
+            this.color.set(255, 0, 0);
+        }
         else if (type == EffectType.piece)
+        {
             this.maxAge = Math.random() * 100 + 50;
+            this.size = Bullet.bullet_size;
+        }
         else if (type == EffectType.obstaclePiece)
             this.maxAge = Math.random() * 100 + 50;
         else if (type == EffectType.obstaclePiece3d)
@@ -153,8 +167,6 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             this.maxAge = 100;
         else if (type == EffectType.teleporterLight)
             this.maxAge = 0;
-        else if (type == EffectType.teleporterPiece)
-            this.maxAge = Math.random() * 100 + 50;
         else if (type == EffectType.interfacePiece || type == EffectType.interfacePieceSparkle)
         {
             this.maxAge = Math.random() * 100 + 50;
@@ -189,12 +201,8 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         this.vZ = 0;
         this.type = null;
         this.age = 0;
-        this.colR = 0;
-        this.colG = 0;
-        this.colB = 0;
-        this.glowR = 0;
-        this.glowG = 0;
-        this.glowB = 0;
+        this.color.set(0, 0, 0);
+        this.glowColor.set(0, 0, 0);
         this.maxAge = Math.random() * 100 + 50;
         this.size = 0;
         this.angle = 0;
@@ -205,6 +213,9 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         this.state = State.live;
         this.force = false;
         this.fastRemoveOnExit = false;
+        this.linkedMovable = null;
+        this.glowSize = 8;
+        this.luminance = 0.5;
     }
 
     @Override
@@ -213,7 +224,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         if (this.maxAge > 0 && this.maxAge < this.age)
             return;
 
-        if (this.type == EffectType.ray)
+        if (this.type == EffectType.ray || this.type == EffectType.blockMarker || this.type == EffectType.circleMarker)
         {
             this.state = State.removed;
             Game.removeEffects.add(this);
@@ -273,7 +284,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         }
         else if (this.type == EffectType.ray)
         {
-            int size = 6;
+            double size = 6 * this.size / Bullet.bullet_size;
 
             if (Level.isDark())
                 Drawing.drawing.setColor(255, 255, 255, 50);
@@ -285,17 +296,37 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             else
                 drawing.fillOval(this.posX, this.posY, size, size);
         }
+        else if (this.type == EffectType.blockMarker)
+        {
+            double size = Game.tile_size;
+
+            if (Level.isDark())
+                Drawing.drawing.setColor(255, 255, 255, 50);
+            else
+                Drawing.drawing.setColor(0, 0, 0, 50);
+
+            drawing.drawRect(this.posX, this.posY, size, size, 10);
+        }
+        else if (this.type == EffectType.circleMarker)
+        {
+            if (Level.isDark())
+                Drawing.drawing.setColor(255, 255, 255, 50);
+            else
+                Drawing.drawing.setColor(0, 0, 0, 50);
+
+            Mine.drawRange2D(this.posX, this.posY, size);
+        }
         else if (this.type == EffectType.explosion)
         {
             double size = (radius * 2);
             double opacity = (100 - this.age * 5);
-            drawing.setColor(this.colR, this.colG, this.colB, opacity, 1);
+            drawing.setColor(this.color, opacity, 1);
             Mine.drawRange2D(this.posX, this.posY, size / 2);
         }
         else if (this.type == EffectType.laser)
         {
             double size = Bullet.bullet_size - this.age / 2;
-            drawing.setColor(255, 0, 0);
+            drawing.setColor(this.color);
 
             if (Game.enable3d)
                 drawing.fillOval(this.posX, this.posY, this.posZ, size, size);
@@ -304,8 +335,8 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         }
         else if (this.type == EffectType.piece)
         {
-            double size = 1 + (Bullet.bullet_size * (1 - this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB, 255, 0.5);
+            double size = 1 + (this.size * (1 - this.age / this.maxAge));
+            drawing.setColor(this.color, 255, 0.5);
 
             if (Game.enable3d)
                 drawing.fillOval(this.posX, this.posY, this.posZ, size, size);
@@ -315,7 +346,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         else if (this.type == EffectType.snow)
         {
             double size2 = 1 + 1.5 * (Bullet.bullet_size * (1 - this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB);
+            drawing.setColor(this.color);
 
             if (Game.enable3d)
                 drawing.fillOval(this.posX, this.posY, this.posZ, size2, size2);
@@ -329,27 +360,27 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             if (this.size > 0)
                 size *= this.size;
 
-            drawing.setColor(this.colR, this.colG, this.colB, 255, 0.5);
+            drawing.setColor(this.color, 255, 0.5);
             drawing.fillInterfaceOval(this.posX, this.posY, size, size);
         }
         else if (this.type == EffectType.obstaclePiece)
         {
             double size = 1 + (Bullet.bullet_size * (1 - this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB);
+            drawing.setColor(this.color);
 
             drawing.fillRect(this.posX, this.posY, size, size);
         }
         else if (this.type == EffectType.obstaclePiece3d)
         {
             double size = 1 + (this.size * (1 - this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB);
+            drawing.setColor(this.color);
 
             drawing.fillBox(this.posX, this.posY, this.posZ, size, size, size);
         }
         else if (this.type == EffectType.charge)
         {
             double size = 1 + (Bullet.bullet_size * (this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB, 255, 0.5);
+            drawing.setColor(this.color, 255, 0.5);
 
             if (Game.enable3d)
                 drawing.fillOval(this.posX, this.posY, this.posZ, size, size);
@@ -376,8 +407,10 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             double size = 1 + (this.size * Math.min(Math.min(1, (this.maxAge - this.age) / 30), Math.min(1, this.age / 30)));
             double angle = this.angle + this.age / 20;
             double distance = 1 + (this.distance * Math.min(Math.min(1, (this.maxAge - this.age) / 30), Math.min(1, this.age / 30)));
+            if (this.linkedMovable != null && this.linkedMovable.destroy)
+                this.maxAge = Math.min(this.age + 60, this.maxAge);
 
-            drawing.setColor(this.colR, this.colG, this.colB, 255, 0.5);
+            drawing.setColor(this.color, 255, 0.5);
             double[] o = Movable.getLocationInDirection(angle, distance);
 
             if (Game.enable3d)
@@ -409,21 +442,19 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         {
             if (Game.enable3d)
             {
-                Drawing.drawing.setColor(this.colR, this.colG, this.colB);
+                Drawing.drawing.setColor(this.color);
                 Drawing.drawing.fillBox(this.posX, this.posY, 0, Obstacle.draw_size, Obstacle.draw_size, this.posZ);
             }
             else
             {
-                Drawing.drawing.setColor(this.colR, this.colG, this.colB, this.posZ);
+                Drawing.drawing.setColor(this.color, this.posZ);
                 Drawing.drawing.fillRect(this.posX, this.posY, Obstacle.draw_size, Obstacle.draw_size);
             }
 
             if (!Game.game.window.drawingShadow)
                 this.posZ -= Panel.frameFrequency / 2;
 
-            this.colR = Math.max(this.colR - Panel.frameFrequency, 0);
-            this.colG = Math.max(this.colG - Panel.frameFrequency, 0);
-            this.colB = Math.max(this.colB - Panel.frameFrequency, 0);
+            this.color.set(Math.max(this.color.red - Panel.frameFrequency, 0), Math.max(this.color.green - Panel.frameFrequency, 0), Math.max(this.color.blue - Panel.frameFrequency, 0));
         }
         else if (this.type == EffectType.glow)
         {
@@ -448,16 +479,6 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
                 Drawing.drawing.setColor(255, 255, 255, (1 - this.size - i) * 25, 1);
                 Drawing.drawing.fillOval(this.posX, this.posY, posZ + 7 + i * 50, Obstacle.draw_size / 2, Obstacle.draw_size / 2, true, false);
             }
-        }
-        else if (this.type == EffectType.teleporterPiece)
-        {
-            double size = 1 + (Bullet.bullet_size * (1 - this.age / this.maxAge));
-            drawing.setColor(this.colR, this.colG, this.colB, 255, 0.5);
-
-            if (Game.enable3d)
-                drawing.fillOval(this.posX, this.posY, this.posZ, size, size);
-            else
-                drawing.fillOval(this.posX, this.posY, size, size);
         }
         else if (this.type == EffectType.shield)
         {
@@ -491,7 +512,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             for (int i = 0; i < max; i++)
             {
                 double a = (max - i) / 400;
-                Drawing.drawing.setColor(255 * a, 255 * a, 200 * a, 255, 1.0);
+                Drawing.drawing.setColor(255, 255, 200, 255 * a, 1.0);
                 Drawing.drawing.fillBox(this.posX, this.posY, i, Game.tile_size, Game.tile_size, 0, (byte) 62);
             }
 
@@ -501,33 +522,33 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         {
             double a = Math.min(25, 50 - this.age) * 2.55 * 4;
 
-            double r2 = Turret.calculateSecondaryColor(this.colR);
-            double g2 = Turret.calculateSecondaryColor(this.colG);
-            double b2 = Turret.calculateSecondaryColor(this.colB);
+            double r2 = Turret.calculateSecondaryColor(this.color.red);
+            double g2 = Turret.calculateSecondaryColor(this.color.green);
+            double b2 = Turret.calculateSecondaryColor(this.color.blue);
 
             drawing.setColor(r2, g2, b2, a, 0.5);
 
             if (Game.enable3d)
             {
                 drawing.fillOval(this.posX, this.posY, this.posZ + this.age, this.size, this.size);
-                drawing.setColor(this.colR, this.colG, this.colB, a, 0);
+                drawing.setColor(this.color, a, 0);
                 drawing.fillOval(this.posX, this.posY, this.posZ + this.age, this.size * 0.8, this.size * 0.8);
                 drawing.setFontSize(32 * this.size / Game.tile_size);
 
                 drawing.setColor(r2, g2, b2, a, 0.5);
                 drawing.drawText(this.posX + 2, 3 + this.posY - this.size / 20, this.posZ + this.age + 1, "!");
-                drawing.setColor(this.glowR, this.glowG, this.glowB, a, 1);
+                drawing.setColor(this.glowColor, a, 1);
                 drawing.drawText(this.posX + 0, 1 + this.posY - this.size / 20, this.posZ + this.age + 2, "!");
             }
             else
             {
                 drawing.fillOval(this.posX, this.posY,this.size, this.size);
-                drawing.setColor(this.colR, this.colG, this.colB, a, 0);
+                drawing.setColor(this.color, a, 0);
                 drawing.fillOval(this.posX, this.posY, this.posZ + this.age, this.size * 0.8, this.size * 0.8);
                 drawing.setFontSize(32 * this.size / Game.tile_size);
                 drawing.setColor(r2, g2, b2, a, 0.5);
                 drawing.drawText(this.posX + 2, 3 + this.posY - this.size / 20, "!");
-                drawing.setColor(this.glowR, this.glowG, this.glowB, a, 1);
+                drawing.setColor(this.glowColor, a, 1);
                 drawing.drawText(this.posX + 0, 1 + this.posY - this.size / 20, "!");
             }
         }
@@ -618,6 +639,104 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         }
     }
 
+    public Effect setColor(double r, double g, double b)
+    {
+        this.color.set(r, g, b);
+        return this;
+    }
+
+    public Effect setColor(Color c)
+    {
+        this.color.set(c);
+        return this;
+    }
+
+    public Effect setColorWithNoise(double r, double g, double b, double noise)
+    {
+        this.color.set(Math.max(0, Math.min(255, r + (Math.random() - 0.5) * noise)), Math.max(0, Math.min(255, g + (Math.random() - 0.5) * noise)), Math.max(0, Math.min(255, b + (Math.random() - 0.5) * noise)));
+        return this;
+    }
+
+    public Effect setColorWithNoise(Color c, double noise)
+    {
+        this.color.alpha = c.alpha;
+        return this.setColorWithNoise(c.red, c.green, c.blue, noise);
+    }
+
+    public Effect setGlowColor(double r, double g, double b)
+    {
+        this.glowColor.set(r, g, b);
+        return this;
+    }
+
+    public Effect setGlowColor(Color c)
+    {
+        this.glowColor.set(c);
+        return this;
+    }
+
+    public Effect setGlowColor(Color c, double alpha)
+    {
+        this.glowColor.set(c);
+        this.glowColor.alpha = alpha;
+        return this;
+    }
+
+    public Effect setGlowEnabled(boolean enabled)
+    {
+        this.enableGlow = enabled;
+        return this;
+    }
+
+    public Effect setColorsFromBullet(Bullet b)
+    {
+        this.setColorWithNoise(b.outlineColor, 50);
+        this.setGlowColor(this.color);
+        this.glowy = b.effect.glowGlowy;
+        this.glowSize = b.effect.glowSize * 2;
+        this.glowColor.alpha = b.effect.glowIntensity * 255;
+        this.size = b.size;
+        return this;
+    }
+
+    public Effect setColorsFromTank(Tank t)
+    {
+        this.setColorWithNoise(t.color, 50);
+        this.setGlowColor(this.color);
+        this.glowSize = t.glowSize;
+        this.glowColor.alpha = t.glowIntensity * 127;
+        return this;
+    }
+
+    public Effect setColorsFromBullet(Bullet b, Color c)
+    {
+        this.setColorWithNoise(c, 50);
+        this.setGlowColor(this.color);
+        this.glowy = b.effect.glowGlowy;
+        this.glowSize = b.effect.glowSize * 2;
+        this.glowColor.alpha = b.effect.glowIntensity * 255;
+        this.size = b.size;
+        return this;
+    }
+
+    public Effect setRadius(double radius)
+    {
+        this.radius = radius;
+        return this;
+    }
+
+    public Effect setSize(double size)
+    {
+        this.size = size;
+        return this;
+    }
+
+    @Override
+    public double getSize()
+    {
+        return size;
+    }
+
     public void drawGlow()
     {
         if (this.maxAge > 0 && this.maxAge < this.age)
@@ -633,9 +752,9 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
         if (this.type == EffectType.piece)
         {
-            double size = 1 + (Bullet.bullet_size * (1 - this.age / this.maxAge));
+            double size = 1 + (this.size * (1 - this.age / this.maxAge));
 
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 127, 1);
+            drawing.setColor(this.glowColor, this.glowColor.alpha, 1);
 
             if (Game.enable3d)
                 drawing.fillGlow(this.posX, this.posY, this.posZ, size * 8, size * 8);
@@ -649,7 +768,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             if (this.size > 0)
                 size *= this.size;
 
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 127, 1);
+            drawing.setColor(this.glowColor, this.glowColor.alpha, 1);
 
             drawing.fillInterfaceGlow(this.posX, this.posY, size * 8, size * 8);
         }
@@ -660,7 +779,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             if (this.size > 0)
                 size *= this.size;
 
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 127, 1);
+            drawing.setColor(this.glowColor, this.glowColor.alpha, 1);
 
             drawing.fillInterfaceGlow(this.posX, this.posY, size * 8, size * 8);
             drawing.fillInterfaceGlowSparkle(this.posX, this.posY, 0, size * 4, this.age / 100.0 * this.radius);
@@ -669,7 +788,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         {
             double size = 1 + (Bullet.bullet_size * (this.age / this.maxAge));
 
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 127, 1);
+            drawing.setColor(this.glowColor, this.glowColor.alpha, 1);
 
             if (Game.enable3d)
                 drawing.fillGlow(this.posX, this.posY, this.posZ, size * 8, size * 8);
@@ -684,7 +803,7 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
             double[] o = Movable.getLocationInDirection(angle, distance);
 
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 255, 1);
+            drawing.setColor(this.glowColor, this.glowColor.alpha, 1);
 
             if (Game.enable3d)
                 drawing.fillGlow(this.posX + o[0], this.posY + o[1], this.posZ, size * 8, size * 8);
@@ -702,21 +821,10 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
             else
                 drawing.fillGlow(this.posX, this.posY, size * 8, size * 8);
         }
-        else if (this.type == EffectType.teleporterPiece)
-        {
-            double size = 1 + (Bullet.bullet_size * (1 - this.age / this.maxAge));
-
-            drawing.setColor(this.colR - this.glowR, this.colG - this.glowG, this.colB - this.glowB, 127, 1);
-
-            if (Game.enable3d)
-                drawing.fillGlow(this.posX, this.posY, this.posZ, size * 8, size * 8, false, true);
-            else
-                drawing.fillGlow(this.posX, this.posY, size * 8, size * 8);
-        }
         else if (this.type == EffectType.snow)
         {
             double size = this.size * (1 + this.age / this.maxAge);
-            drawing.setColor(this.colR, this.colG, this.colB, (1 - this.age / this.maxAge) * 255);
+            drawing.setColor(this.color, (1 - this.age / this.maxAge) * 255);
 
             if (Game.enable3d)
                 drawing.fillGlow(this.posX, this.posY, this.posZ, size, size, true);
@@ -731,11 +839,12 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         else if (this.type == EffectType.ray)
         {
             drawing.setColor(255, 255, 255, 50, 1);
+            double size = this.size / Bullet.bullet_size * 24;
 
             if (Game.enable3d)
-                drawing.fillGlow(this.posX, this.posY, this.posZ, 24, 24, false);
+                drawing.fillGlow(this.posX, this.posY, this.posZ, size, size, false);
             else
-                drawing.fillGlow(this.posX, this.posY, 24, 24, false);
+                drawing.fillGlow(this.posX, this.posY, size, size, false);
         }
     }
 
@@ -762,43 +871,36 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         {
             this.state = State.removed;
 
-            if (Game.effects.contains(this) && !Game.removeEffects.contains(this))
+            if (Game.effects.contains(this))
                 Game.removeEffects.add(this);
-            else if (Game.tracks.contains(this) && !Game.removeTracks.contains(this))
-            {
-                Drawing.drawing.trackRenderer.remove(this);
-                Game.removeTracks.add(this);
-            }
         }
+
+        int x = (int) (this.posX / Game.tile_size);
+        int y = (int) (this.posY / Game.tile_size);
 
         if (this.type == EffectType.obstaclePiece3d)
         {
-            int x = (int) Math.floor(this.posX / Game.tile_size);
-            int y = (int) Math.floor(this.posY / Game.tile_size);
-
             boolean collidedX = false;
             boolean collidedY = false;
-            boolean collided;
+            boolean collided = false;
 
-            if (x < 0 || x >= Game.currentSizeX)
-                collidedX = true;
-
-            if (y < 0 || y >= Game.currentSizeY)
-                collidedY = true;
-
-            if (this.posZ <= 5)
+            if (x != prevGridX || y != prevGridY)
             {
-                this.vZ = -0.6 * this.vZ;
-                this.vX *= 0.8;
-                this.vY *= 0.8;
-                this.posZ = 10 - this.posZ;
+                Chunk.Tile t = Chunk.getOrDefault(x, y);
+                this.gridHeight = Math.max(5, t.height());
+
+                if (x < 0 || x >= Game.currentSizeX)
+                    collidedX = true;
+
+                if (y < 0 || y >= Game.currentSizeY)
+                    collidedY = true;
             }
 
             if (!(collidedX || collidedY))
             {
-                collided = this.posZ <= Game.game.lastHeightGrid[x][y];
+                collided = this.posZ <= this.gridHeight;
 
-                if (collided && prevGridX >= 0 && prevGridX < Game.currentSizeX && prevGridY >= 0 && prevGridY < Game.currentSizeY && Game.game.lastHeightGrid[x][y] != Game.game.lastHeightGrid[prevGridX][prevGridY])
+                if (collided && prevGridX >= 0 && prevGridX < Game.currentSizeX && prevGridY >= 0 && prevGridY < Game.currentSizeY && this.gridHeight > Math.max(5, Chunk.getOrDefault(prevGridX, prevGridY).height()))
                 {
                     collidedX = this.prevGridX != x;
                     collidedY = this.prevGridY != y;
@@ -811,11 +913,11 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
             if (collided)
             {
-                this.vX *= 0.8;
-                this.vY *= 0.8;
-
                 if (collidedX)
                 {
+                    this.vX *= 0.8;
+                    this.vY *= 0.8;
+
                     double barrierX = this.prevGridX * Game.tile_size;
 
                     if (this.vX > 0)
@@ -829,6 +931,9 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
 
                 if (collidedY)
                 {
+                    this.vX *= 0.8;
+                    this.vY *= 0.8;
+
                     double barrierY = this.prevGridY * Game.tile_size;
 
                     if (this.vY > 0)
@@ -840,10 +945,19 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
                     this.posY = this.posY - dist;
                 }
 
-                if (!collidedX && !collidedY && (x != this.initialGridX || y != initialGridY) && Math.abs(this.posZ - Game.game.lastHeightGrid[x][y]) < Game.tile_size / 2)
+                boolean newObstacle = (x != this.initialGridX || y != initialGridY);
+                if (!collidedX && !collidedY && this.posZ < 5 || (newObstacle && Math.abs(this.posZ - this.gridHeight) < Game.tile_size / 2))
                 {
+                    this.vX *= 0.8;
+                    this.vY *= 0.8;
+
+                    Chunk.Tile t = Chunk.getOrDefault(x, y);
+                    this.gridHeight = Math.max(t.height(), 5);
                     this.vZ = -0.6 * this.vZ;
-                    this.posZ = (2 * Game.game.lastHeightGrid[x][y] - this.posZ);
+                    if (newObstacle)
+                        this.posZ = (2 * this.gridHeight - this.posZ);
+                    else
+                        this.posZ = (10 - this.posZ);
                 }
             }
 
@@ -854,32 +968,29 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
         {
             if (Math.random() < Panel.frameFrequency * Game.effectMultiplier * 0.1)
             {
+                Effect e;
                 if (Game.enable3d)
                 {
-                    Effect e = Effect.createNewEffect(this.posX + (Math.random() - 0.5) * Game.tile_size, this.posY + (Math.random() - 0.5) * Game.tile_size, this.posZ, EffectType.piece);
-                    e.colR = 255;
-                    e.colG = Math.random() * 255;
-                    e.colB = 0;
+                    e = Effect.createNewEffect(this.posX + (Math.random() - 0.5) * Game.tile_size, this.posY + (Math.random() - 0.5) * Game.tile_size, this.posZ, EffectType.piece);
+                    e.color.set(255, Math.random() * 255, 0);
+                    e.glowColor.set(e.color);
                     e.vZ = Math.random() + 1;
-                    Game.addEffects.add(e);
                 }
                 else
                 {
-                    Effect e = Effect.createNewEffect(this.posX + (Math.random() - 0.5) * Game.tile_size, this.posY + (Math.random() - 0.5) * Game.tile_size, EffectType.piece);
-                    e.colR = 255;
-                    e.colG = Math.random() * 255;
-                    e.colB = 0;
-                    Game.addEffects.add(e);
+                    e = Effect.createNewEffect(this.posX + (Math.random() - 0.5) * Game.tile_size, this.posY + (Math.random() - 0.5) * Game.tile_size, EffectType.piece);
+                    e.color.set(255, Math.random() * 255, 0);
+                    e.glowColor.set(e.color);
                 }
+                Game.addEffects.add(e);
             }
 
             if (Game.enable3d && Math.random() < Panel.frameFrequency * Game.effectMultiplier * 0.1 * (2 - this.posZ / Game.tile_size))
             {
                 Effect e2 = Effect.createNewEffect(this.posX + (Math.random() - 0.5) * Game.tile_size, this.posY + (Math.random() - 0.5) * Game.tile_size, this.posZ - Game.tile_size / 4, EffectType.obstaclePiece3d);
                 e2.addPolarMotion(Math.random() * 2 * Math.PI, Math.random());
-                e2.colR = (this.colR + this.colG + this.colB) / 3;
-                e2.colG = e2.colR;
-                e2.colB = e2.colR;
+                double col = (this.color.red + this.color.green + this.color.blue) / 3;
+                e2.color.set(col, col, col);
                 e2.size *= this.posZ / Game.tile_size;
                 e2.maxAge *= 2;
                 e2.vZ = Math.random();
@@ -892,21 +1003,5 @@ public class Effect extends Movable implements IDrawableWithGlow, IDrawableLight
     {
         Drawing.drawing.setColor(0, 0, 0, 64);
         Drawing.drawing.trackRenderer.addRect(this, this.posX, this.posY, this.posZ, size * Obstacle.draw_size / Game.tile_size, size * Obstacle.draw_size / Game.tile_size, angle);
-    }
-
-    @Override
-    public boolean lit()
-    {
-        return (Game.fancyLights && type == EffectType.explosion);
-    }
-
-    @Override
-    public double[] getLightInfo()
-    {
-        this.lightInfo[3] = 4 * (1 - this.age / this.maxAge);
-        this.lightInfo[4] = 255;
-        this.lightInfo[5] = 200;
-        this.lightInfo[6] = 160;
-        return this.lightInfo;
     }
 }

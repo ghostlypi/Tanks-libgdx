@@ -1,6 +1,7 @@
 package tanks.obstacle;
 
 import tanks.*;
+import tanks.attribute.StatusEffect;
 import tanks.gui.screen.ScreenGame;
 import tanks.rendering.ShaderMud;
 import tanks.tank.Tank;
@@ -17,26 +18,31 @@ public class ObstacleMud extends Obstacle
         this.tankCollision = false;
         this.bulletCollision = false;
         this.checkForObjects = true;
-        this.enableStacking = false;
 
-        this.isSurfaceTile = true;
+        this.type = ObstacleType.ground;
 
         this.colorR = 70;
         this.colorG = 30;
         this.colorB = 0;
 
-        this.replaceTiles = true;
-
         this.description = "A thick puddle of mud that slows tanks down";
 
+        this.replaceTiles = true;
         this.tileRenderer = ShaderMud.class;
+    }
+
+    @Override
+    public void draw3dOutline(double r, double g, double b, double a)
+    {
+        Drawing.drawing.setColor(r, g, b, a);
+        Drawing.drawing.fillRect(this.posX, this.posY, 0, Obstacle.draw_size, Obstacle.draw_size, false);
     }
 
     @Override
     public void onObjectEntry(Movable m)
     {
         if (m instanceof Tank)
-            m.addStatusEffect(StatusEffect.mud, 0, 20, 30);
+            m.em().addStatusEffect(StatusEffect.mud, 0, 20, 30);
 
         this.onObjectEntryLocal(m);
     }
@@ -65,14 +71,8 @@ public class ObstacleMud extends Obstacle
             e1.setPolarMotion(0, 0);
             e2.setPolarMotion(0, 0);
 
-            double var = 20;
-            e1.colR = Math.min(255, Math.max(0, this.colorR - 20 + Math.random() * var - var / 2));
-            e1.colG = Math.min(255, Math.max(0, this.colorG - 20 + Math.random() * var - var / 2));
-            e1.colB = Math.min(255, Math.max(0, this.colorB + Math.random() * var - var / 2));
-
-            e2.colR = Math.min(255, Math.max(0, this.colorR - 20 + Math.random() * var - var / 2));
-            e2.colG = Math.min(255, Math.max(0, this.colorG - 20 + Math.random() * var - var / 2));
-            e2.colB = Math.min(255, Math.max(0, this.colorB + Math.random() * var - var / 2));
+            e1.setColorWithNoise(this.colorR - 20, this.colorG - 20, this.colorB, 20);
+            e2.setColorWithNoise(this.colorR - 20, this.colorG - 20, this.colorB, 20);
 
             double angle = t.getPolarDirection() + Math.PI / 2;
 

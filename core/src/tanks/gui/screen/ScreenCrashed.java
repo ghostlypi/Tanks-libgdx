@@ -62,13 +62,21 @@ public class ScreenCrashed extends Screen
 		this.chatroom.imageSizeX = imgsize;
 		this.chatroom.imageSizeY = imgsize;
 		this.chatroom.imageXOffset = 150 * this.chatroom.sizeX / 350;
+
+        this.openFolder.image = "icons/folder.png";
+        this.openFolder.imageSizeX = imgsize;
+        this.openFolder.imageSizeY = imgsize;
+        this.openFolder.imageXOffset = -150 * this.chatroom.sizeX / 350;
+
+		Game.game.window.transformations.clear();
+		Game.game.window.loadPerspective();
 	}
 
 	Button exit = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY - 100, this.objWidth, this.objHeight, "Exit the game", () -> System.exit(0));
 
 	Button quit = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY - 160, this.objWidth, this.objHeight, "Return to title", Game::exitToTitle);
 
-	Button chatroom = new Button(Drawing.drawing.interfaceSizeX / 2 - 380, Drawing.drawing.interfaceSizeY - 100, this.objWidth, this.objHeight, "Get help on Discord", () ->
+	Button chatroom = new Button(Drawing.drawing.interfaceSizeX / 2 + 380, Drawing.drawing.interfaceSizeY - 100, this.objWidth, this.objHeight, "Get help on Discord", () ->
 	{
 		try
 		{
@@ -81,12 +89,19 @@ public class ScreenCrashed extends Screen
 	}
 	);
 
+    Button openFolder = new Button(Drawing.drawing.interfaceSizeX / 2 - 380, Drawing.drawing.interfaceSizeY - 100, this.objWidth, this.objHeight, "Crash report folder", () ->
+    {
+        Game.game.fileManager.openFileManager(Game.homedir + Game.crashesPath);
+    }
+    );
+
 	@Override
 	public void update()
 	{
 		this.quit.update();
 		this.exit.update();
 		this.chatroom.update();
+        this.openFolder.update();
 	}
 
 	@Override
@@ -116,7 +131,10 @@ public class ScreenCrashed extends Screen
 			drawing.drawInterfaceText(100, 100, sadFace);
 
 		drawing.setInterfaceFontSize(48);
-		drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2, 100, ohNoes + " Tanks ran into a problem!");
+		if (!Game.game.window.runningFromSource)
+			drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2, 100, ohNoes + " Tanks ran into a problem!");
+		else
+			drawing.displayInterfaceText(Drawing.drawing.interfaceSizeX / 2, 100, ohNoes + " You did it again! You silly coder...");
 
 		drawing.setInterfaceFontSize(24);
 
@@ -150,6 +168,7 @@ public class ScreenCrashed extends Screen
 		this.quit.draw();
 		this.exit.draw();
 		this.chatroom.draw();
+        this.openFolder.draw();
 	}
 
 }

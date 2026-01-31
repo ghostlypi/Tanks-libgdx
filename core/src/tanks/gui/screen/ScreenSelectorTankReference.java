@@ -55,7 +55,14 @@ public class ScreenSelectorTankReference extends ScreenEditorTanksONable<ITankFi
         @Override
         public void run()
         {
-            pointer.set((ITankField) pointer.get().resolve());
+            Tank t = pointer.get().resolve();
+            if (t instanceof TankAIControlled)
+            {
+                TankAIControlled t1 = new TankAIControlled();
+                ((TankAIControlled) t).cloneProperties(t1);
+                t = t1;
+            }
+            pointer.set((ITankField) t);
             ScreenEditorTank s = new ScreenEditorTank(pointer.cast(), screen);
             s.onComplete = onComplete;
             s.objName = objName;
@@ -230,8 +237,7 @@ public class ScreenSelectorTankReference extends ScreenEditorTanksONable<ITankFi
         this.drawDefaultBackground();
 
         Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1200, 660);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1180, 640);
+        Drawing.drawing.drawPopup(this.centerX, this.centerY, 1200, 660);
 
         quit.draw();
 

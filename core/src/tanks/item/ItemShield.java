@@ -1,24 +1,28 @@
 package tanks.item;
 
-import tanks.*;
+import tanks.Drawing;
+import tanks.Effect;
+import tanks.Game;
+import tanks.Player;
 import tanks.network.event.EventTankUpdateHealth;
 import tanks.tank.Tank;
+import tanks.tankson.ICopyable;
 import tanks.tankson.Property;
 
-public class ItemShield extends Item
+public class ItemShield extends Item implements ICopyable<ItemShield>
 {
     public static final String item_class_name = "shield";
 
     @Property(id = "health_boost", name = "Hitpoint boost", desc = "This item will instantly add this many hitpoints to the tank using it \n \n The default player tank has 1 hitpoint, and the default bullet does 1 hitpoint of damage")
-    public double amount;
+    public double amount = 1;
 
     @Property(id = "max_extra_health", name = "Max extra hitpoints", desc = "This item will not heal a tank to more than its default hitpoints plus 'max extra hitpoints' \n \n The default player tank has 1 hitpoint, and the default bullet does 1 hitpoint of damage")
-    public double max;
+    public double max = 5;
 
     public ItemShield()
     {
         this.rightClick = true;
-        this.icon = "shield.png";
+        this.icon = DefaultItemIcons.shield.getCopy();
     }
 
     @Override
@@ -38,6 +42,10 @@ public class ItemShield extends Item
         public void use(Tank t)
         {
             t.health += this.item.amount;
+            if (this.item.amount > 0)
+                t.healFlashAnimation = 1;
+            else if (this.item.amount < 0 && t.health > 0)
+                t.damageFlashAnimation = 1;
 
             if (t.health > this.item.max + t.baseHealth)
                 t.health = this.item.max + t.baseHealth;
@@ -46,7 +54,7 @@ public class ItemShield extends Item
 
             Drawing.drawing.playGlobalSound("shield.ogg");
 
-            if (t.health > 6 && (int) (t.health - this.item.amount) != (int) (t.health))
+            if ((int) (t.health - this.item.amount) != (int) (t.health))
             {
                 Effect e = Effect.createNewEffect(t.posX, t.posY, t.posZ + t.size * 0.75, Effect.EffectType.shield);
                 e.size = t.size;
@@ -60,7 +68,7 @@ public class ItemShield extends Item
         @Override
         public boolean usable(Tank t)
         {
-            return (this.item.max <= 0 || t.health < this.item.max) && this.cooldown <= 0;
+            return (this.item.max <= 0 || t.health < this.item.max + t.baseHealth) && this.cooldown <= 0;
         }
     }
 }

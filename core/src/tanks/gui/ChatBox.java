@@ -7,6 +7,8 @@ import tanks.Game;
 import tanks.Panel;
 import tanks.gui.input.InputBindingGroup;
 import tanks.gui.screen.ScreenInfo;
+import tanks.gui.screen.ScreenPartyLobby;
+import tanks.translation.Translation;
 
 public class ChatBox extends TextBox
 {
@@ -15,6 +17,7 @@ public class ChatBox extends TextBox
 	public String defaultTextColor = "\u00A7127127127255";
 
 	public boolean persistent = true;
+    public boolean justSelectedByKeybind = false;
 
 	public ChatBox(double x, double y, double sX, double sY, InputBindingGroup input, Runnable f)
 	{
@@ -39,12 +42,13 @@ public class ChatBox extends TextBox
 		this.selectedFullColorG = 0;
 		this.selectedFullColorB = 0;
 
-		String defaultText = "Click here or press " + Game.game.input.chat.getInputs() + " to send a chat message";
-		if (Game.game.window.touchscreen)
-			defaultText = "Click here to send a chat message";
-
-		this.inputText = defaultText;
-		this.defaultText = defaultText;
+        if (!Game.game.window.touchscreen)
+        {
+            String defaultText = Translation.translate("Click here or press %s to send a chat message");
+            this.defaultText = String.format(defaultText, Game.game.input.chat.getInputs());
+        }
+        else
+			this.defaultText = Translation.translate("Click here to send a chat message");
 
 		this.input = input;
 	}
@@ -64,6 +68,7 @@ public class ChatBox extends TextBox
 
 		this.posY = Drawing.drawing.getInterfaceEdgeY(true) - 30;
 
+        // Check for selection by mouse/touch and process the "clear contents & deselect" button
 		if (!Game.game.window.touchscreen)
 		{
 			double mx = Drawing.drawing.getInterfaceMouseX();
@@ -83,64 +88,51 @@ public class ChatBox extends TextBox
 				double mx = Drawing.drawing.getInterfacePointerX(p.x);
 				double my = Drawing.drawing.getInterfacePointerY(p.y);
 
-				if (p.tag.equals(""))
+				if (p.tag.isEmpty())
 				{
 					boolean handled = checkMouse(mx, my, p.valid);
 
 					if (handled)
-						p.tag = "textbox";
+                    {
+                        p.tag = "textbox";
+                        Game.game.window.validPressedButtons.remove((Integer) InputCodes.MOUSE_BUTTON_1);
+                    }
 				}
 			}
 		}
 
+        boolean justSel = false;
+        // Check for selection keybind
 		if (!this.selected && this.input.isValid() && Panel.selectedTextBox == null)
 		{
 			this.input.invalidate();
-			Game.game.window.getRawTextKeys().clear();
+            this.justSelectedByKeybind = true;
+            justSel = true;
+            this.onSelect();
+        }
 
-			if (Panel.selectedTextBox != null)
-				Panel.selectedTextBox.submit();
-
-			Panel.selectedTextBox = this;
-
-			this.selected = true;
-			this.inputText = "";
-
-			Drawing.drawing.playVibration("click");
-			Drawing.drawing.playSound("bounce.ogg", 0.5f, 0.7f);
-		}
-
+        // Submit keybind
 		if (this.selected && Game.game.window.validPressedKeys.contains(InputCodes.KEY_ENTER))
 		{
-			if (this.inputText.trim().length() > 0)
+			if (!this.inputText.trim().isEmpty())
 				this.function.run();
 
 			Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ENTER);
 			Game.game.window.pressedKeys.remove((Integer) InputCodes.KEY_ENTER);
-			Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ESCAPE);
 
-			this.selected = false;
-			Panel.selectedTextBox = null;
-			this.inputText = this.defaultText;
-			Game.game.window.showKeyboard = false;
-
-			Drawing.drawing.playVibration("click");
-			Drawing.drawing.playSound("destroy.ogg", 2f);
+            this.onDeselect();
+            Drawing.drawing.playSound("destroy.ogg", 2f);
 		}
 
+        // Deselect keybind
 		if (this.selected && Game.game.window.validPressedKeys.contains(InputCodes.KEY_ESCAPE))
 		{
-			Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ESCAPE);
-			this.selected = false;
-			Panel.selectedTextBox = null;
-			this.inputText = this.defaultText;
-			Game.game.window.showKeyboard = false;
-
-			Drawing.drawing.playVibration("click");
-			Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
+            this.onDeselect();
+            Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
 		}
 
-		if (this.selected)
+        // Handle typing
+		if (this.selected && !justSelectedByKeybind)
 		{
 			double frac = Math.max(0, Math.round(Drawing.drawing.interfaceScale * (this.posY + 30) + Math.max(0, Panel.windowHeight - Drawing.drawing.statsHeight
 					- Drawing.drawing.interfaceSizeY * Drawing.drawing.interfaceScale) / 2) - Game.game.window.absoluteHeight * Game.game.window.keyboardFraction)
@@ -149,9 +141,15 @@ public class ChatBox extends TextBox
 			Game.game.window.showKeyboard = true;
 			this.checkKeys();
 		}
+
+        if (justSelectedByKeybind && !justSel)
+        {
+            Game.game.window.getRawTextKeys().clear();
+            justSelectedByKeybind = false;
+        }
 	}
 
-	public boolean checkMouse(double mx, double my, boolean valid)
+	public boolean checkMouse(double mx, double my, boolean isPressedDown)
 	{
 		boolean handled = false;
 		hover = this.persistent && mx > posX - sizeX / 2 && mx < posX + sizeX / 2 && my > posY - sizeY / 2 && my < posY + sizeY / 2;
@@ -160,37 +158,50 @@ public class ChatBox extends TextBox
 		if (Game.game.window.touchscreen)
 			hover = hover || mx > posX - sizeX / 2 && mx < posX - sizeX / 2 + sizeY && my > posY - sizeY / 2 && my < posY + sizeY / 2;
 
-		if (hover && valid && Game.game.window.validPressedButtons.contains(InputCodes.MOUSE_BUTTON_1) && !selected)
+		if (hover && isPressedDown && !selected)
 		{
-			this.inputText = "";
-
-			if (Panel.selectedTextBox != null)
-				Panel.selectedTextBox.submit();
-
-			Panel.selectedTextBox = this;
-
-			selected = true;
 			handled = true;
-			Game.game.window.validPressedButtons.remove((Integer) InputCodes.MOUSE_BUTTON_1);
-			Game.game.window.getRawTextKeys().clear();
-			Drawing.drawing.playSound("bounce.ogg", 0.5f, 0.7f);
-			Drawing.drawing.playVibration("click");
-		}
+            this.onSelect();
+        }
 
-		if (clearSelected && valid)
+		if (clearSelected && isPressedDown)
 		{
-			Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ESCAPE);
-			this.selected = false;
-			Panel.selectedTextBox = null;
-			this.inputText = this.defaultText;
 			handled = true;
-			Game.game.window.showKeyboard = false;
-			Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
-			Drawing.drawing.playVibration("click");
+            this.onDeselect();
+            Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
 		}
 
 		return handled;
 	}
+
+    protected void onSelect()
+    {
+        if (Panel.selectedTextBox != null)
+            Panel.selectedTextBox.submit();
+
+        Panel.selectedTextBox = this;
+
+        this.selected = true;
+        this.inputText = "";
+
+        Game.game.window.pressedKeys.clear();
+        Game.game.window.validPressedKeys.clear();
+        Game.game.window.getRawTextKeys().clear();
+        Drawing.drawing.playSound("bounce.ogg", 0.5f, 0.7f);
+        Drawing.drawing.playVibration("click");
+    }
+
+    protected void onDeselect()
+    {
+        Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ESCAPE);
+
+        Panel.selectedTextBox = null;
+        this.selected = false;
+        this.inputText = "";
+
+        Game.game.window.showKeyboard = false;
+        Drawing.drawing.playVibration("click");
+    }
 
 	public void draw(boolean persistent)
 	{
@@ -203,6 +214,8 @@ public class ChatBox extends TextBox
 	public void draw()
 	{
 		Drawing drawing = Drawing.drawing;
+        if (ScreenPartyLobby.isClient && ScreenPartyLobby.muted)
+            return;
 
 		if (this.selected)
 		{
@@ -216,31 +229,9 @@ public class ChatBox extends TextBox
 			drawing.setColor(0, 0, 0);
 			drawing.setInterfaceFontSize(this.sizeY * 0.6);
 
-			String name = this.defaultTextColor + Game.player.username;
-			String s = name + ": \u00a7000000000255" + this.inputText + "\u00a7127127127255_";
+            this.drawTextPreview();
 
-			double limit = Drawing.drawing.interfaceSizeX - 80;
-			if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, s) / Drawing.drawing.interfaceScale > limit)
-			{
-				for (int i = 0; i < s.length(); i++)
-				{
-					if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, s.substring(i)) / Drawing.drawing.interfaceScale < limit)
-					{
-						s = s.substring(i);
-
-						if (i <= name.length())
-							s = this.defaultTextColor + s;
-						break;
-					}
-				}
-
-				drawing.drawInterfaceText(this.posX + this.sizeX / 2 - 50, this.posY, s, true);
-			}
-			else
-				drawing.drawInterfaceText(this.posX - this.sizeX / 2 + 10, this.posY, s, false);
-
-
-			if (!clearSelected || Game.game.window.touchscreen)
+            if (!clearSelected || Game.game.window.touchscreen)
 				drawing.setColor(160, 160, 160);
 			else
 				drawing.setColor(255, 0, 0);
@@ -261,10 +252,10 @@ public class ChatBox extends TextBox
 			drawing.setColor(0, 0, 0);
 			drawing.setInterfaceFontSize(this.sizeY * 0.6);
 
-			if (this.inputText.equals(this.defaultText))
+			if (this.inputText.isEmpty())
 				drawing.drawInterfaceText(this.posX - this.sizeX / 2 + 10, this.posY, this.defaultTextColor + this.defaultText, false);
 			else
-				drawing.drawInterfaceText(this.posX - this.sizeX / 2 + 10, this.posY, this.inputText, false);
+				this.drawTextPreview();
 		}
 		else if (Game.game.window.touchscreen)
 		{
@@ -274,7 +265,35 @@ public class ChatBox extends TextBox
 		}
 	}
 
-	public void drawBox()
+    protected void drawTextPreview()
+    {
+        Drawing drawing = Drawing.drawing;
+
+        String name = this.defaultTextColor + Game.player.username;
+        String s = name + ": \u00a7000000000255" + this.inputText + "\u00a7127127127255_";
+
+        double limit = Drawing.drawing.interfaceSizeX - 80;
+        if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, s) / Drawing.drawing.interfaceScale > limit)
+        {
+            for (int i = 0; i < s.length(); i++)
+            {
+                if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, s.substring(i)) / Drawing.drawing.interfaceScale < limit)
+                {
+                    s = s.substring(i);
+
+                    if (i <= name.length())
+                        s = this.defaultTextColor + s;
+                    break;
+                }
+            }
+
+            drawing.drawInterfaceText(this.posX + this.sizeX / 2 - 50, this.posY, s, true);
+        }
+        else
+            drawing.drawInterfaceText(this.posX - this.sizeX / 2 + 10, this.posY, s, false);
+    }
+
+    public void drawBox()
 	{
 		double xPad = -40;
 		Drawing.drawing.fillInterfaceRect(this.posX, this.posY, this.sizeX + xPad, this.sizeY);
@@ -301,4 +320,12 @@ public class ChatBox extends TextBox
 
 		Game.game.window.shapeRenderer.setBatchMode(false, false, false);
 	}
+
+    @Override
+    public void submit() {
+        super.submit();
+
+        // Ensure that input text is cleared on edge cases where we are defocused though non-normal methods
+        this.inputText = "";
+    }
 }

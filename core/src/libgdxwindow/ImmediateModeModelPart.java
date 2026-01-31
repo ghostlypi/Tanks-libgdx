@@ -8,10 +8,23 @@ import basewindow.Model;
 import basewindow.ModelPart;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class ImmediateModeModelPart extends ModelPart
 {
     public BaseWindow window;
+
+    @Override
+    public void setSkin(HashMap<String, String> skins)
+    {
+
+    }
+
+    @Override
+    public void setSkin(String tex)
+    {
+
+    }
 
     @Override
     public void draw(double posX, double posY, double posZ, double sX, double sY, double sZ, AxisRotation[] axisRotations, boolean depthTest)

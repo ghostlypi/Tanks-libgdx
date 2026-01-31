@@ -1,11 +1,15 @@
 package tanks.obstacle;
 
 import tanks.*;
+import tanks.attribute.AttributeModifier;
+import tanks.attribute.EffectManager;
+import tanks.attribute.StatusEffect;
 import tanks.bullet.Bullet;
 import tanks.gui.screen.ScreenGame;
 import tanks.gui.screen.ScreenPartyHost;
 import tanks.network.event.EventObstacleBoostPanelEffect;
 import tanks.rendering.ShaderBoostPanel;
+import tanks.rendering.ShaderGroundObstacle;
 import tanks.tank.Tank;
 
 public class ObstacleBoostPanel extends Obstacle
@@ -23,20 +27,26 @@ public class ObstacleBoostPanel extends Obstacle
         this.tankCollision = false;
         this.bulletCollision = false;
         this.checkForObjects = true;
-        this.enableStacking = false;
 
-        this.isSurfaceTile = true;
-        this.update = true;
+        this.type = ObstacleType.ground;
 
         this.colorR = 255;
         this.colorG = 180;
         this.colorB = 0;
 
         this.renderer = ShaderBoostPanel.class;
+        this.tileRenderer = ShaderGroundObstacle.class;
 
         glow = Effect.createNewEffect(this.posX, this.posY, 0, Effect.EffectType.boostLight);
 
         this.description = "A panel which speeds up tanks and bullets";
+    }
+
+    @Override
+    public void draw3dOutline(double r, double g, double b, double a)
+    {
+        Drawing.drawing.setColor(r, g, b, a);
+        Drawing.drawing.fillBox(this.posX, this.posY, 0, Obstacle.draw_size, Obstacle.draw_size, 10);
     }
 
     @Override
@@ -46,6 +56,7 @@ public class ObstacleBoostPanel extends Obstacle
             return;
 
         this.brightness = Math.min(this.brightness + Panel.frameFrequency * 8, 100);
+        setUpdate(true);
 
         if (Math.random() < Panel.frameFrequency * Game.effectMultiplier * 0.25)
             this.addEffect(m.posX, m.posY, 0);
@@ -59,16 +70,18 @@ public class ObstacleBoostPanel extends Obstacle
 
         this.onObjectEntryLocal(m);
 
-        AttributeModifier am = m.getAttribute(AttributeModifier.glow);
+        EffectManager effectManager = m.em();
+        AttributeModifier am = effectManager.getAttribute(AttributeModifier.glow);
+
         boolean effect = am == null || (am.age >= am.deteriorationAge && am.deteriorationAge > 0);
 
         if (effect)
             addEntryEffect(m);
 
         if (m instanceof Tank)
-            m.addStatusEffect(StatusEffect.boost_tank, 0, 10, 50);
+            effectManager.addStatusEffect(StatusEffect.boost_tank, 0, 10, 50);
         else
-            m.addStatusEffect(StatusEffect.boost_bullet, 0, 10, 50);
+            effectManager.addStatusEffect(StatusEffect.boost_bullet, 0, 10, 50);
     }
 
     public void addEntryEffect(Movable m)
@@ -82,37 +95,32 @@ public class ObstacleBoostPanel extends Obstacle
 
             double radius = 250000;
             if (distsq <= radius)
-            {
                 Drawing.drawing.playSound("boost.ogg", 1, (float) ((radius - distsq) / radius));
-            }
         }
 
         if (Game.effectsEnabled && !ScreenGame.finished && !(m instanceof Bullet && !((Bullet) m).playPopSound))
         {
             for (int i = 0; i < 25 * Game.effectMultiplier; i++)
-            {
                 this.addEffect(m.posX, m.posY, 0.5);
-            }
         }
     }
 
     @Override
     public void draw()
     {
-        double offset = 0;
-
-        if (Game.fancyTerrain)
-            offset = Math.sin((this.posX + this.posY + System.currentTimeMillis() / 50.0) / 10) * 40 + 40;
-
         if (!Game.enable3d)
         {
+            double offset = 0;
+
+            if (Game.fancyTerrain)
+                offset = Math.sin((this.posX + this.posY + System.currentTimeMillis() / 50.0) / 10) * 40 + 40;
+
             Drawing.drawing.setColor(this.colorR - offset / 2, Math.min(this.colorG - offset + this.brightness, 255), this.colorB + this.brightness, 255, 1.0);
             Drawing.drawing.fillRect(this, this.posX, this.posY, Obstacle.draw_size, Obstacle.draw_size);
         }
         else
         {
             Drawing.drawing.setColor(255, this.brightness, 0, (this.posX / Game.tile_size + this.posY / Game.tile_size) % 255);
-            //Drawing.drawing.setColor(this.colorR - offset / 2, Math.min(this.colorG - offset + this.brightness, 255), this.colorB + this.brightness, 255, 1.0);
             Drawing.drawing.fillBox(this, this.posX, this.posY, 0, Obstacle.draw_size, Obstacle.draw_size, 10);
         }
     }
@@ -124,16 +132,15 @@ public class ObstacleBoostPanel extends Obstacle
 
         if (prevBrightness != brightness)
             Game.redrawObstacles.add(this);
+        else if (brightness <= 0)
+            setUpdate(false);
     }
 
     public void addEffect(double x, double y, double extra)
     {
         Effect e = Effect.createNewEffect(x, y, Game.tile_size / 2, Effect.EffectType.piece);
-        double var = 50;
-
-        e.colR = Math.min(255, Math.max(0, this.colorR + Math.random() * var - var / 2));
-        e.colG = Math.min(255, Math.max(0, this.colorG + Math.random() * var - var / 2));
-        e.colB = Math.min(255, Math.max(0, this.colorB + Math.random() * var - var / 2));
+        e.setColorWithNoise(this.colorR, this.colorG, this.colorB, 50);
+        e.glowColor.set(e.color);
 
         if (Game.enable3d)
             e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() + extra);
@@ -146,11 +153,6 @@ public class ObstacleBoostPanel extends Obstacle
     public double getTileHeight()
     {
         return 0;
-    }
-
-    public boolean colorChanged()
-    {
-        return !Drawing.drawing.isOutOfBounds(Drawing.drawing.gameToAbsoluteX(this.posX, Obstacle.draw_size), Drawing.drawing.gameToAbsoluteY(this.posY, Obstacle.draw_size));
     }
 
     public double getGroundHeight()
@@ -172,4 +174,5 @@ public class ObstacleBoostPanel extends Obstacle
 
         return null;
     }
+
 }

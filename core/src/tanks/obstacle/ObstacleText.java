@@ -6,16 +6,16 @@ import tanks.Panel;
 
 public class ObstacleText extends Obstacle
 {
-	public String text;
+	public String text = "Text";
 	public double fontSize = 16;
 	public double age = 0;
 	public double duration = -1;
 
-	public ObstacleText(String name, String text, double posX, double posY) 
+	public ObstacleText(String name, double posX, double posY)
 	{
 		super(name, posX, posY);
 
-		this.update = true;
+		this.setUpdate(true);
 		this.replaceTiles = false;
 		this.drawLevel = 1;
 		this.destructible = false;
@@ -25,9 +25,8 @@ public class ObstacleText extends Obstacle
 		this.colorG = 0;
 		this.colorB = 0;
 		this.colorA = 0;
-		this.text = text;
-		this.enableStacking = false;
 		this.batchDraw = false;
+		this.type = ObstacleType.extra;
 
 		this.description = "A piece of text used to instruct the player";
 
@@ -58,6 +57,12 @@ public class ObstacleText extends Obstacle
 		Drawing.drawing.setFontSize(this.fontSize);
 		Drawing.drawing.setColor(this.colorR, this.colorG, this.colorB);
 		Drawing.drawing.drawInterfaceText(this.posX, this.posY, this.text);
+	}
+
+	@Override
+	public void draw3dOutline(double r, double g, double b, double a)
+	{
+
 	}
 
 	public double getTileHeight()

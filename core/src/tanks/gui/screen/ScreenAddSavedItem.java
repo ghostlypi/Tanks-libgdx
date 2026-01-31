@@ -7,7 +7,7 @@ import tanks.Game;
 import tanks.Level;
 import tanks.gui.Button;
 import tanks.gui.SavedFilesList;
-import tanks.gui.SearchBox;
+import tanks.gui.SearchBoxInstant;
 import tanks.item.Item;
 import tanks.translation.Translation;
 
@@ -30,7 +30,7 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
 
     public Consumer<Item.ItemStack<?>> onComplete;
 
-    SearchBox search = new SearchBox(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
+    SearchBoxInstant search = new SearchBoxInstant(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
     {
         @Override
         public void run()
@@ -73,10 +73,10 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
 
     public ScreenAddSavedItem(Screen previousScreen, Consumer<Item.ItemStack<?>> onComplete, String itemName)
     {
-        this(previousScreen, onComplete, itemName, Item.class);
+        this(previousScreen, onComplete, itemName, Item.ItemStack.class);
     }
 
-    public ScreenAddSavedItem(Screen previousScreen, Consumer<Item.ItemStack<?>> onComplete, String itemName, Class<? extends Item> itemClass)
+    public ScreenAddSavedItem(Screen previousScreen, Consumer<Item.ItemStack<?>> onComplete, String itemName, Class itemClass)
     {
         super(350, 40, 380, 60);
 
@@ -113,12 +113,12 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
                         Item.ItemStack<?> i = Item.ItemStack.fromString(null, file.nextLine());
                         file.stopReading();
 
-                        b.image = i.item.icon;
+                        b.itemIcon = i.item.icon;
                         b.imageXOffset = - b.sizeX / 2 + b.sizeY / 2 + 10;
                         b.imageSizeX = b.sizeY;
                         b.imageSizeY = b.sizeY;
 
-                        if (!itemClass.isAssignableFrom(i.item.getClass()))
+                        if (!itemClass.isAssignableFrom(i.getClass()) && !itemClass.isAssignableFrom(i.item.getClass()))
                             b.text = null;
                     }
                     catch (Exception e)
@@ -134,7 +134,7 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
             Item.ItemStack<?> i = Item.ItemStack.fromString(null, s);
             i.item.name = Translation.translate(i.item.name);
 
-            if (itemClass.isAssignableFrom(i.item.getClass()))
+            if (itemClass.isAssignableFrom(i.getClass()) || itemClass.isAssignableFrom(i.item.getClass()))
             {
                 builtInItemsCount++;
 
@@ -148,9 +148,10 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
 
                 this.allItems.buttons.add(b);
 
+                b.setSubtext("Built-in");
                 b.translated = false;
 
-                b.image = i.item.icon;
+                b.itemIcon = i.item.icon;
                 b.imageXOffset = -b.sizeX / 2 + b.sizeY / 2 + 10;
                 b.imageSizeX = b.sizeY;
                 b.imageSizeY = b.sizeY;
@@ -262,12 +263,6 @@ public class ScreenAddSavedItem extends Screen implements IBlankBackgroundScreen
 
         Drawing.drawing.setInterfaceFontSize(this.titleSize);
         Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - this.objYSpace * 5, "%s item templates", itemName);
-    }
-
-    @Override
-    public void setupLayoutParameters()
-    {
-
     }
 
     @Override

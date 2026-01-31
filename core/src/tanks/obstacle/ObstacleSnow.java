@@ -1,6 +1,7 @@
 package tanks.obstacle;
 
 import tanks.*;
+import tanks.attribute.StatusEffect;
 import tanks.bullet.Bullet;
 import tanks.gui.screen.*;
 import tanks.network.event.EventObstacleSnowMelt;
@@ -33,10 +34,10 @@ public class ObstacleSnow extends Obstacle
         this.tankCollision = false;
         this.bulletCollision = false;
         this.checkForObjects = true;
-        this.enableStacking = false;
         this.destroyEffect = Effect.EffectType.snow;
         this.destroyEffectAmount = 0.25;
         this.replaceTiles = false;
+        this.type = ObstacleType.top;
 
         double darkness = Math.random() * 20;
 
@@ -56,17 +57,23 @@ public class ObstacleSnow extends Obstacle
     }
 
     @Override
+    public void draw3dOutline(double r, double g, double b, double a)
+    {
+        Drawing.drawing.setColor(r, g, b, a);
+        Drawing.drawing.fillBox(this.posX, this.posY, 0, Game.tile_size, Game.tile_size, this.depth * 0.2 * Game.tile_size);
+    }
+
+    @Override
     public void onObjectEntry(Movable m)
     {
         if (!ScreenPartyLobby.isClient && (m instanceof Tank || m instanceof Bullet))
         {
-            m.addStatusEffect(StatusEffect.snow_velocity, 0, 20, 30);
-            m.addStatusEffect(StatusEffect.snow_friction, 0, 5, 10);
+            m.em().addStatusEffect(StatusEffect.snow_velocity, 0, 20, 30);
+            m.em().addStatusEffect(StatusEffect.snow_friction, 0, 5, 10);
 
             int amt = 5;
             int lastDepth = (int) Math.ceil(this.depth * amt);
             this.depth -= Panel.frameFrequency * 0.005;
-            Game.redrawObstacles.add(this);
 
             if (this.depth <= 0)
                 Game.removeObstacles.add(this);
@@ -81,14 +88,13 @@ public class ObstacleSnow extends Obstacle
     @Override
     public void onObjectEntryLocal(Movable m)
     {
+        if (ScreenPartyLobby.isClient)
+            this.depth = Math.max(0.05, this.depth - Panel.frameFrequency * 0.005);
+
+        redrawSelfAndNeighbors();
+
         if (Game.effectsEnabled && !ScreenGame.finished)
         {
-            if (ScreenPartyLobby.isClient)
-            {
-                this.depth = Math.max(0.05, this.depth - Panel.frameFrequency * 0.005);
-                Game.redrawObstacles.add(this);
-            }
-
             double speed = Math.sqrt((Math.pow(m.vX, 2) + Math.pow(m.vY, 2)));
 
             double mul = 0.0625 / 4;
@@ -101,12 +107,8 @@ public class ObstacleSnow extends Obstacle
             for (int i = 0; i < amt; i++)
             {
                 Effect e = Effect.createNewEffect(m.posX, m.posY, m.posZ, Effect.EffectType.snow);
-                e.colR = this.colorR;
-                e.colG = this.colorG;
-                e.colB = this.colorB;
-                e.glowR = e.colR;
-                e.glowG = e.colG;
-                e.glowB = e.colB;
+                e.setColor(this.colorR, this.colorG, this.colorB);
+                e.setGlowColor(e.color);
                 e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * speed / 2);
                 e.vX += m.vX;
                 e.vY += m.vY;
@@ -159,14 +161,9 @@ public class ObstacleSnow extends Obstacle
             {
                 this.finalHeight = z;
                 Drawing.drawing.setColor(this.colorR, this.colorG, this.colorB);
-                Drawing.drawing.fillBox(this, this.posX, this.posY, 0, Game.tile_size, Game.tile_size, z * this.visualDepth, (byte) (this.getOptionsByte(this.getTileHeight()) + 1));
+                Drawing.drawing.fillBox(this, this.posX, this.posY, 0, Game.tile_size, Game.tile_size, z * this.visualDepth, this.getOptionsByte(this.getTileHeight()));
             }
         }
-    }
-
-    public byte getOptionsByte(double h)
-    {
-        return 0;
     }
 
     public double getTileHeight()

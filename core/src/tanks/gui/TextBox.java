@@ -24,6 +24,8 @@ public class TextBox implements IDrawable, ITrigger
 	public String previousInputText;
 	public String inputText;
 
+	public String hintText = null;
+
 	public boolean enableHover = false;
 	public String[] hoverText;
 	public String hoverTextRaw = "";
@@ -114,8 +116,8 @@ public class TextBox implements IDrawable, ITrigger
 	{
 		this(x, y, sX, sY, text, f, defaultText);
 		this.enableHover = true;
-		this.hoverText = hoverText.split("---");
-		this.hoverTextRaw = hoverText;
+        this.hoverTextRaw = Translation.translate(hoverText);
+		this.hoverText = this.hoverTextRaw.split("---");
 	}
 
 	public void draw()
@@ -270,6 +272,11 @@ public class TextBox implements IDrawable, ITrigger
 
 		if (selected)
 			Drawing.drawing.drawInterfaceText(posX, posY, inputText + "\u00a7127127127255_");
+		else if (inputText.isEmpty() && this.hintText != null)
+		{
+			Drawing.drawing.setColor(0, 0, 0, 127);
+			Drawing.drawing.drawInterfaceText(posX, posY, hintText);
+		}
 		else
 			Drawing.drawing.drawInterfaceText(posX, posY, inputText);
 	}
@@ -530,11 +537,13 @@ public class TextBox implements IDrawable, ITrigger
 		{
 			if (Game.game.window.textPressedKeys.contains(InputCodes.KEY_C))
 			{
+                Game.game.window.textPressedKeys.remove((Integer) InputCodes.KEY_V);
 				this.copy();
 			}
 
 			if (Game.game.window.textPressedKeys.contains(InputCodes.KEY_V))
 			{
+                Game.game.window.textPressedKeys.remove((Integer) InputCodes.KEY_V);
 				this.paste();
 			}
 
@@ -626,13 +635,13 @@ public class TextBox implements IDrawable, ITrigger
 						inputText += key;
 				}
 
-				if (allowNegatives && inputText.length() == 0 || inputText.toLowerCase(Locale.ROOT).endsWith("e"))
+				if (allowNegatives && inputText.length() == 0 || (inputText.toLowerCase(Locale.ROOT).endsWith("e")) && allowDoubles)
 				{
 					if ('-' == key)
 						inputText += key;
 				}
 
-				if (allowDoubles && !inputText.contains(".") && !inputText.toLowerCase(Locale.ROOT).contains("e"))
+				if (allowDoubles && !inputText.contains(".") && (!inputText.toLowerCase(Locale.ROOT).contains("e")) && allowDoubles)
 				{
 					if ('.' == key)
 						inputText += key;
@@ -692,7 +701,6 @@ public class TextBox implements IDrawable, ITrigger
 
 	public void copy()
 	{
-		Game.game.window.textPressedKeys.clear();
 		Game.game.window.textValidPressedKeys.clear();
 		Game.game.window.getRawTextKeys().clear();
 
@@ -701,7 +709,6 @@ public class TextBox implements IDrawable, ITrigger
 
 	public void paste()
 	{
-		Game.game.window.textPressedKeys.clear();
 		Game.game.window.textValidPressedKeys.clear();
 		Game.game.window.getRawTextKeys().clear();
 
@@ -720,33 +727,45 @@ public class TextBox implements IDrawable, ITrigger
 		this.posY = y;
 	}
 
+	@Override
+	public double getPositionX()
+	{
+		return this.posX;
+	}
+
+	@Override
+	public double getPositionY()
+	{
+		return this.posY;
+	}
+
 	public static void drawTallGlow(double posX, double posY, double sizeX, double sizeY, double extra, double size, double r, double g, double b, double a, boolean glow)
 	{
 		Game.game.window.shapeRenderer.setBatchMode(true, true, false, glow);
 
 		Drawing drawing = Drawing.drawing;
-		drawing.setColor(0, 0, 0, 0);
+        drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY - sizeY * size - extra, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY - sizeY * size - extra, 0);
 		drawing.setColor(r, g, b, a);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY - extra, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY - extra, 0);
 
-		drawing.setColor(0, 0, 0, 0);
+        drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY + sizeY * size, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY + sizeY * size, 0);
 		drawing.setColor(r, g, b, a);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY, 0);
 
-		drawing.setColor(0, 0, 0, 0);
+        drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 - size * sizeY, posY - extra, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 - size * sizeY, posY, 0);
 		drawing.setColor(r, g, b, a);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY - extra, 0);
 
-		drawing.setColor(0, 0, 0, 0);
+        drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + size * sizeY, posY - extra, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + size * sizeY, posY, 0);
 		drawing.setColor(r, g, b, a);
@@ -767,25 +786,25 @@ public class TextBox implements IDrawable, ITrigger
 		{
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 15) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 15) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 16) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 16) / 30.0 * Math.PI) * size, 0);
 
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i + 1) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 1) / 30.0 * Math.PI) * size, 0);
 
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY - extra, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 30) / 30.0 * Math.PI) * size, posY - extra + sizeY * Math.sin((i + 30) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 31) / 30.0 * Math.PI) * size, posY - extra + sizeY * Math.sin((i + 31) / 30.0 * Math.PI) * size, 0);
 
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY - extra, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i + 45) / 30.0 * Math.PI) * size, posY - extra + sizeY * Math.sin((i + 45) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i + 46) / 30.0 * Math.PI) * size, posY - extra + sizeY * Math.sin((i + 46) / 30.0 * Math.PI) * size, 0);
 		}

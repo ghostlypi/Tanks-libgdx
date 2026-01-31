@@ -1,26 +1,26 @@
 package tanks.obstacle;
 
-public class ObstacleIndestructible extends Obstacle
+public class ObstacleIndestructible extends ObstacleStackable
 {
 
 	public ObstacleIndestructible(String name, double posX, double posY) 
 	{
 		super(name, posX, posY);
-		
+
+        this.type = ObstacleType.full;
 		this.destructible = false;
-		double col = (this.colorR + this.colorG + this.colorB) / 3 + 50;
-		this.colorR = col;
-		this.colorG = col;
-		this.colorB = col;
-
-		for (int i = 0; i < default_max_height; i++)
-		{
-			double c = (this.stackColorR[i] + this.stackColorG[i] + this.stackColorB[i]) / 3 + 50;
-			this.stackColorR[i] = c;
-			this.stackColorG[i] = c;
-			this.stackColorB[i] = c;
-		}
-
 		this.description = "A solid indestructible block";
+	}
+
+	@Override
+	public double[] getRandomColor()
+	{
+		double[] col = super.getRandomColor();
+		double c = (col[0] + col[1] + col[2]) / 3 + 50;
+		col[0] = c;
+		col[1] = c;
+		col[2] = c;
+
+		return col;
 	}
 }

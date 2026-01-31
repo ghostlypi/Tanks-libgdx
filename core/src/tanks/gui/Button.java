@@ -1,24 +1,35 @@
 package tanks.gui;
 
+import basewindow.Color;
 import basewindow.IModel;
 import basewindow.InputCodes;
 import basewindow.InputPoint;
 import tanks.*;
-import tanks.gui.screen.ScreenGame;
-import tanks.gui.screen.ScreenInfo;
-import tanks.gui.screen.ScreenPartyHost;
-import tanks.gui.screen.ScreenPartyLobby;
+import tanks.gui.input.InputBindingGroup;
+import tanks.gui.screen.*;
+import tanks.item.ItemIcon;
 import tanks.translation.Translation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class Button implements IDrawable, ITrigger
 {
 	public Runnable function;
-	public double posX;
-	public double posY;
-	public double sizeX;
-	public double sizeY;
+	public Runnable doubleClickFunc = null;
+	public InputBindingGroup keybind;
+	public double posX, posY, sizeX, sizeY;
+
+	public double age = 0;
+	public double lastClick = 0;
+	public int rapidClicks;
+
+	public boolean draggable;
+	public String dragTooltip = null;
+	public double clickX, clickY, origX, origY;
+	public boolean isDragging;
+	public Consumer<Button> whileDragging;
+	public BiConsumer<Button, Boolean> finishDrag;
 
 	public boolean translated = true;
 
@@ -41,25 +52,45 @@ public class Button implements IDrawable, ITrigger
 	public boolean justPressed = false;
 
 	public boolean enabled = true;
+	/** Whether you can click the button while it's disabled */
+	public boolean disabledClick = false;
 
-	public double bgColR = 255, bgColG = 255, bgColB = 255;
-	public double disabledColR = 200, disabledColG = 200, disabledColB = 200;
-	public double selectedColR = 240, selectedColG = 240, selectedColB = 255;
+	public double disabledColR = 200;
+	public double disabledColG = 200;
+	public double disabledColB = 200;
 
-	public double textColR = 0, textColG = 0, textColB = 0;
-	public double textOffsetX = 0, textOffsetY = 0;
+	public double bgColR = 255;
+	public double bgColG = 255;
+	public double bgColB = 255;
+	public double bgColA = 255;
 
-	public double imageR = 255, imageG = 255, imageB = 255;
+	public double selectedColR = 240;
+	public double selectedColG = 240;
+	public double selectedColB = 255;
+
+	public double textColR = 0;
+	public double textColG = 0;
+	public double textColB = 0;
+
+	public double textOffsetX = 0;
+	public double textOffsetY = 0;
+
+	public Color imageColor = new Color(255, 255, 255);
 	public boolean drawImageShadow = false;
 
 	public boolean silent = false;
 
 	public boolean fullInfo = false;
 
-	public String image = null;
+    public ItemIcon itemIcon = null;
+    public String image = null;
 	public IModel model = null;
-	public double imageSizeX = 0, imageSizeY = 0;
-	public double imageXOffset = 0, imageYOffset = 0;
+    public HashMap<String, Object> miscData = new HashMap<>();
+	public double imageSizeX = 0;
+	public double imageSizeY = 0;
+
+	public double imageXOffset = 0;
+	public double imageYOffset = 0;
 
 	public double effectTimer = 0;
 	public long lastFrame = 0;
@@ -130,13 +161,65 @@ public class Button implements IDrawable, ITrigger
 		}
 	}
 
+	public static class Toggle extends Button
+	{
+		private static final Runnable emptyFunction = () -> {};
+
+		public Function<Boolean, String> getText = b -> b ? ScreenOptions.onText : ScreenOptions.offText;
+		public Consumer<Boolean> setter;
+		public Producer<Boolean> getter;
+
+        public String originalText;
+
+		public Toggle(double x, double y, double sX, double sY, String text, Consumer<Boolean> setter, Producer<Boolean> getter)
+		{
+			this(x, y, sX, sY, text, emptyFunction, setter, getter, null);
+		}
+
+		public Toggle(double x, double y, double sX, double sY, String text, Consumer<Boolean> setter, Producer<Boolean> getter, String hoverText, Object... hoverTextOptions)
+		{
+			this(x, y, sX, sY, text, emptyFunction, setter, getter, hoverText, hoverTextOptions);
+		}
+
+		public Toggle(double x, double y, double sX, double sY, String text, Runnable f, Consumer<Boolean> setter, Producer<Boolean> getter)
+		{
+			this(x, y, sX, sY, text, f, setter, getter, null);
+		}
+
+		public Toggle(double x, double y, double sX, double sY, String text, Runnable f, Consumer<Boolean> setter, Producer<Boolean> getter, String hoverText, Object... hoverTextOptions)
+		{
+			super(x, y, sX, sY, text, f, hoverText, hoverTextOptions);
+			this.setter = setter;
+			this.getter = getter;
+            this.originalText = text;
+			this.function = () ->
+			{
+				setter.accept(!getter.produce());
+				this.updateText();
+				f.run();
+			};
+            this.updateText();
+		}
+
+		public void updateText()
+		{
+			setText(originalText, getter.produce() ? ScreenOptions.onText : ScreenOptions.offText);
+		}
+
+		public Toggle setCustomText(Function<Boolean, String> getText)
+		{
+			this.getText = getText;
+			return this;
+		}
+	}
+
 	public void draw()
 	{
 		Drawing drawing = Drawing.drawing;
 
 		if (this.fontSize < 0)
 		{
-			if (this.enableHover)
+			if (this.enableHover || this.fullInfo)
 				drawing.setBoundedInterfaceFontSize(this.sizeY * 0.6, this.sizeX - 80, this.text);
 			else
 				drawing.setBoundedInterfaceFontSize(this.sizeY * 0.6, this.sizeX - 40, this.text);
@@ -171,7 +254,7 @@ public class Button implements IDrawable, ITrigger
 		else if (selected && !Game.game.window.touchscreen)
 			drawing.setColor(this.selectedColR, this.selectedColG, this.selectedColB);
 		else
-			drawing.setColor(this.bgColR, this.bgColG, this.bgColB);
+			drawing.setColor(this.bgColR, this.bgColG, this.bgColB, this.bgColA);
 
 		drawing.fillInterfaceRect(posX, posY, sizeX - sizeY, sizeY);
 		drawing.fillInterfaceOval(posX - sizeX / 2 + sizeY / 2, posY, sizeY, sizeY);
@@ -185,13 +268,20 @@ public class Button implements IDrawable, ITrigger
 
 		drawing.drawInterfaceText(posX + this.textOffsetX, posY + this.textOffsetY, t);
 
-		if (this.subtext != null)
-		{
-			drawing.setInterfaceFontSize(12);
-			drawing.drawInterfaceText(this.posX + sizeX / 2 - sizeY / 2, this.posY + this.sizeY * 0.325, this.subtext, true);
-		}
+        if (this.itemIcon != null)
+        {
+            if (this.drawImageShadow)
+            {
+                drawing.setColor(127, 127, 127);
+                drawing.drawInterfaceImage(itemIcon, this.posX + this.imageXOffset + 1.5, this.posY + this.imageYOffset + 1.5, this.imageSizeX, this.imageSizeY);
+            }
 
-		if (this.image != null)
+            drawing.setColor(this.imageColor);
+            drawing.drawInterfaceImage(itemIcon, this.posX + this.imageXOffset, this.posY + this.imageYOffset, this.imageSizeX, this.imageSizeY);
+
+        }
+
+        if (this.image != null)
 		{
 			if (this.drawImageShadow)
 			{
@@ -199,7 +289,7 @@ public class Button implements IDrawable, ITrigger
 				drawing.drawInterfaceImage(image, this.posX + this.imageXOffset + 1.5, this.posY + this.imageYOffset + 1.5, this.imageSizeX, this.imageSizeY);
 			}
 
-			drawing.setColor(this.imageR, this.imageG, this.imageB);
+			drawing.setColor(this.imageColor);
 			drawing.drawInterfaceImage(image, this.posX + this.imageXOffset, this.posY + this.imageYOffset, this.imageSizeX, this.imageSizeY);
 		}
 
@@ -209,45 +299,58 @@ public class Button implements IDrawable, ITrigger
 			drawing.drawInterfaceModel2D(model, this.posX + this.imageXOffset, this.posY + this.imageYOffset, 0,this.imageSizeX * 0.75, this.imageSizeY * 0.75, this.imageSizeY * 0.75);
 		}
 
+        if (this.subtext != null)
+        {
+            drawing.setColor(this.textColR, this.textColG, this.textColB);
+            double ox = (this.enableHover && !this.fullInfo) ? this.sizeY / 2 : 0;
+            drawing.setInterfaceFontSize(12);
+            drawing.drawInterfaceText(this.posX + sizeX / 2 - sizeY / 2 - ox, this.posY + this.sizeY * 0.325, this.subtext, true);
+        }
+
 		if (this.fontSize < 0)
 			Drawing.drawing.setInterfaceFontSize(this.sizeY * 0.6);
 		else
 			Drawing.drawing.setInterfaceFontSize(this.fontSize);
 
-		if (enableHover)
+		if (!isDragging)
 		{
-			if (Game.glowEnabled && !fullInfo)
+			if (enableHover)
 			{
-				if (infoSelected && !Game.game.window.touchscreen)
+				if (Game.glowEnabled && !fullInfo)
 				{
-					drawGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY + 2.5, this.sizeY * 3 / 4, this.sizeY * 3 / 4, 0.7, 0, 0, 0, 80, false);
-					Drawing.drawing.setColor(0, 0, 255);
-					Drawing.drawing.fillInterfaceGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, this.sizeY * 9 / 4, this.sizeY * 9 / 4);
+					if (infoSelected && !Game.game.window.touchscreen)
+					{
+						drawGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY + 2.5, this.sizeY * 3 / 4, this.sizeY * 3 / 4, 0.7, 0, 0, 0, 80, false);
+						Drawing.drawing.setColor(0, 0, 255);
+						Drawing.drawing.fillInterfaceGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, this.sizeY * 9 / 4, this.sizeY * 9 / 4);
+					}
+					else
+						drawGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY + 2.5, this.sizeY * 3 / 4, this.sizeY * 3 / 4, 0.6, 0, 0, 0, 100, false);
 				}
-				else
-					drawGlow(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY + 2.5, this.sizeY * 3 / 4, this.sizeY * 3 / 4, 0.6, 0, 0, 0, 100, false);
-			}
 
-			if ((infoSelected || (selected && fullInfo)) && !Game.game.window.touchscreen)
-			{
-				if (!fullInfo)
+				if ((infoSelected || (selected && fullInfo)) && !Game.game.window.touchscreen)
 				{
-					drawing.setColor(0, 0, 255);
+					if (!fullInfo)
+					{
+						drawing.setColor(0, 0, 255);
+						drawing.fillInterfaceOval(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, this.sizeY * 3 / 4, this.sizeY * 3 / 4);
+						drawing.setColor(255, 255, 255);
+						drawing.drawInterfaceText(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, "i");
+					}
+
+					drawing.drawTooltip(this.hoverText);
+				}
+				else if (!fullInfo)
+				{
+					drawing.setColor(0, 150, 255);
 					drawing.fillInterfaceOval(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, this.sizeY * 3 / 4, this.sizeY * 3 / 4);
 					drawing.setColor(255, 255, 255);
 					drawing.drawInterfaceText(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, "i");
 				}
-
-				drawing.drawTooltip(this.hoverText);
-			}
-			else if (!fullInfo)
-			{
-				drawing.setColor(0, 150, 255);
-				drawing.fillInterfaceOval(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, this.sizeY * 3 / 4, this.sizeY * 3 / 4);
-				drawing.setColor(255, 255, 255);
-				drawing.drawInterfaceText(this.posX + this.sizeX / 2 - this.sizeY / 2, this.posY, "i");
 			}
 		}
+		else if (dragTooltip != null)
+			drawing.drawTooltip(dragTooltip.split("---"));
 	}
 
 	@Override
@@ -257,16 +360,52 @@ public class Button implements IDrawable, ITrigger
 		this.posY = y;
 	}
 
+	@Override
+	public double getPositionX()
+	{
+		return this.posX;
+	}
+
+	@Override
+	public double getPositionY()
+	{
+		return this.posY;
+	}
+
+	@Override
+	public InputBindingGroup getKeybind()
+	{
+		return keybind;
+	}
+
+	@Override
+	public void onClick()
+	{
+		if (Panel.draggedButton != null)
+			Panel.draggedButton.finishDrag.accept(Panel.draggedButton, true);
+		this.function.run();
+	}
+
+	@Override
+	public void doubleClick()
+	{
+		if (this.doubleClickFunc != null)
+			this.doubleClickFunc.run();
+	}
+
 	public void update()
 	{
 		this.justPressed = false;
+		this.age += Panel.frameFrequency;
+
+		this.updateKeybind();
 
 		if (!Game.game.window.touchscreen)
 		{
 			double mx = Drawing.drawing.getInterfaceMouseX();
 			double my = Drawing.drawing.getInterfaceMouseY();
 
-			boolean handled = checkMouse(mx, my, Game.game.window.validPressedButtons.contains(InputCodes.MOUSE_BUTTON_1));
+			boolean handled = checkMouse(mx, my, Game.game.window.pressedButtons.contains(InputCodes.MOUSE_BUTTON_1), Game.game.window.validPressedButtons.contains(InputCodes.MOUSE_BUTTON_1));
 
 			if (handled)
 				Game.game.window.validPressedButtons.remove((Integer) InputCodes.MOUSE_BUTTON_1);
@@ -277,7 +416,7 @@ public class Button implements IDrawable, ITrigger
 			{
 				InputPoint p = Game.game.window.touchPoints.get(i);
 
-				if (p.tag.equals(""))
+				if (p.tag.isEmpty())
 				{
 					double mx = Drawing.drawing.getInterfacePointerX(p.x);
 					double my = Drawing.drawing.getInterfacePointerY(p.y);
@@ -324,7 +463,16 @@ public class Button implements IDrawable, ITrigger
 
 	public boolean checkMouse(double mx, double my, boolean valid)
 	{
+		return checkMouse(mx, my, false, valid);
+	}
+
+	public boolean checkMouse(double mx, double my, boolean pressed, boolean valid)
+	{
+		if (Panel.draggedButton != null && Panel.draggedButton != this)
+			return false;
+
 		boolean handled = false;
+		boolean cancelDrag = Game.game.window.pressedButtons.contains(InputCodes.MOUSE_BUTTON_2);
 
 		if (Game.game.window.touchscreen)
 		{
@@ -337,9 +485,11 @@ public class Button implements IDrawable, ITrigger
 
 		if (selected && valid)
 		{
+			clickX = mx;
+			clickY = my;
+
 			if (infoSelected && this.enableHover && Game.game.window.touchscreen && !fullInfo)
 			{
-				handled = true;
 				Drawing.drawing.playSound("bullet_explode.ogg", 2f, 0.3f);
 				//Drawing.drawing.playSound(this.sound, 1f, 1f);
 				Drawing.drawing.playVibration("click");
@@ -349,20 +499,58 @@ public class Button implements IDrawable, ITrigger
 				else
 					Game.screen = new ScreenInfo(Game.screen, this.translatedText, this.hoverText);
 			}
-			else if (enabled)
+			else
 			{
-				handled = true;
-
-				function.run();
-
-				if (!this.silent)
+				if (enabled || disabledClick)
 				{
-					Drawing.drawing.playSound("bullet_explode.ogg", 2f, 0.3f);
-					Drawing.drawing.playVibration("click");
+					onClick();
+
+					if (!this.silent)
+					{
+						Drawing.drawing.playSound("bullet_explode.ogg", 2f, 0.3f);
+						Drawing.drawing.playVibration("click");
+					}
+
+					this.justPressed = true;
+					handled = true;
 				}
 
-				this.justPressed = true;
+				if (age - lastClick < 30)
+					this.rapidClicks++;
+				else
+					this.rapidClicks = 1;
+
+				if (this.rapidClicks >= 2)
+					doubleClick();
+
+				this.lastClick = age;
 			}
+		}
+		else if (draggable && selected && pressed && !cancelDrag)
+		{
+			if (Math.abs(clickX - mx) + Math.abs(clickY - my) > (sizeX + sizeY) / 4)
+			{
+				isDragging = true;
+				Panel.draggedButton = this;
+				setPosition(mx, my);
+				if (whileDragging != null)
+					whileDragging.accept(this);
+			}
+		}
+		else if (isDragging)
+		{
+			isDragging = false;
+			posX = origX;
+			posY = origY;
+			Panel.draggedButton = null;
+
+			if (finishDrag != null)
+				finishDrag.accept(this, cancelDrag);
+		}
+		else
+		{
+			origX = posX;
+			origY = posY;
 		}
 
 		if (Game.game.window.touchscreen)
@@ -379,14 +567,14 @@ public class Button implements IDrawable, ITrigger
 		Game.game.window.shapeRenderer.setBatchMode(true, true, false, glow);
 
 		Drawing drawing = Drawing.drawing;
-		drawing.setColor(0, 0, 0, 0);
+		drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY - sizeY * size, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY - sizeY * size, 0);
 		drawing.setColor(r, g, b, a);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY, 0);
 
-		drawing.setColor(0, 0, 0, 0);
+        drawing.setColor(r, g, b, 0);
 		drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY + sizeY * size, 0);
 		drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY + sizeY * size, 0);
 		drawing.setColor(r, g, b, a);
@@ -400,13 +588,13 @@ public class Button implements IDrawable, ITrigger
 		{
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2, posY, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 15) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 15) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX - sizeX / 2 + sizeY / 2 + sizeY * Math.cos((i + 16) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 16) / 30.0 * Math.PI) * size, 0);
 
 			drawing.setColor(r, g, b, a);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2, posY, 0);
-			drawing.setColor(0, 0, 0, 0);
+            drawing.setColor(r, g, b, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i + 45) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 45) / 30.0 * Math.PI) * size, 0);
 			drawing.addInterfaceVertex(posX + sizeX / 2 - sizeY / 2 + sizeY * Math.cos((i + 46) / 30.0 * Math.PI) * size, posY + sizeY * Math.sin((i + 46) / 30.0 * Math.PI) * size, 0);
 		}
@@ -464,12 +652,8 @@ public class Button implements IDrawable, ITrigger
 		}
 
 		//e.size = 0.5;
-		e.colR = 255;
-		e.colG = 255;
-		e.colB = 255;
-		e.glowR = 255 * 0.25;
-		e.glowG = e.glowR;
-		e.glowB = e.glowR;
+		e.setColor(255, 255, 255);
+        e.setGlowColor(e.color, 127);
 		e.vX /= 2;
 		e.vY /= 2;
 		e.maxAge *= max;
@@ -528,6 +712,7 @@ public class Button implements IDrawable, ITrigger
 		this.hoverTextRaw = hoverText;
 		this.hoverTextRawTranslated = Translation.translate(hoverText, objects);
 		this.hoverText = this.hoverTextRawTranslated.split("---");
+		this.enableHover = true;
 	}
 
 	public void setHoverTextUntranslated(String hoverText)

@@ -5,9 +5,10 @@ import tanks.Game;
 import tanks.Level;
 import tanks.gui.Button;
 import tanks.gui.SavedFilesList;
-import tanks.gui.SearchBox;
+import tanks.gui.SearchBoxInstant;
 import tanks.gui.screen.leveleditor.OverlayEditorMenu;
 import tanks.gui.screen.leveleditor.ScreenLevelEditor;
+import tanks.translation.Translation;
 
 public class ScreenSavedLevels extends Screen
 {
@@ -19,7 +20,7 @@ public class ScreenSavedLevels extends Screen
 
 	Button quit = new Button(this.centerX - this.objXSpace / 2, this.centerY + this.objYSpace * 5, this.objWidth, this.objHeight, "Back", () -> Game.screen = new ScreenPlaySingleplayer());
 
-	SearchBox search = new SearchBox(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
+	SearchBoxInstant search = new SearchBoxInstant(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
 	{
 		@Override
 		public void run()
@@ -56,7 +57,9 @@ public class ScreenSavedLevels extends Screen
 		String name = System.currentTimeMillis() + ".tanks";
 
 		Level l = new Level("{28,18||0-0-player}");
-		Game.screen = new ScreenLevelEditor(name, l);
+		ScreenLevelEditor sl = new ScreenLevelEditor(name, l);
+		sl.modified = true;
+		Game.screen = sl;
 		l.loadLevel((ILevelPreviewScreen) Game.screen);
 	}
 	);
@@ -80,7 +83,7 @@ public class ScreenSavedLevels extends Screen
 						Game.screen = new OverlayEditorMenu(s, s);
 					}
 				},
-				(file) -> "Last modified---" + Game.timeInterval(file.lastModified(), System.currentTimeMillis()) + " ago");
+				(file) -> Translation.translate("Last modified---%s ago", Game.timeInterval(file.lastModified(), System.currentTimeMillis())));
 
 		fullSavedLevelsList.drawOpenFileButton = true;
 		fullSavedLevelsList.sortedByTime = sortByTime;
@@ -144,12 +147,12 @@ public class ScreenSavedLevels extends Screen
 
 			if (search.inputText.length() > 0)
 			{
-				Drawing.drawing.drawInterfaceText(this.centerX, this.centerY, "No levels found");
+				Drawing.drawing.displayInterfaceText(this.centerX, this.centerY, "No levels found");
 			}
 			else
 			{
-				Drawing.drawing.drawInterfaceText(this.centerX, this.centerY - 30, "You have no levels");
-				Drawing.drawing.drawInterfaceText(this.centerX, this.centerY + 30, "Create a level with the 'New level' button!");
+				Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - 30, "You have no levels");
+				Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + 30, "Create a level with the 'New level' button!");
 			}
 		}
 

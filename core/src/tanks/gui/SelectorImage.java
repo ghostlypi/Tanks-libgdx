@@ -151,17 +151,13 @@ public class SelectorImage extends Selector
         Button.addEffect(posX - sizeX / 2 + sizeY * 7 / 8, posY - sizeY * 3 / 8, this.sizeY * 1.5, this.sizeY * 1.5, this.glowEffects);
     }
 
-    @Override
-    public void setScreen()
+    public ScreenSelector getSelectorScreen()
     {
-        this.resetLayout();
-
         ScreenSelector s = new ScreenSelector(this, Game.screen);
-        s.images = this.images;
-        s.models = this.models;
         s.buttonList.imageR = this.imageR;
         s.buttonList.imageG = this.imageG;
         s.buttonList.imageB = this.imageB;
+        s.buttonList.controlsYOffset += 30;
 
         if (this.images != null || this.drawImages)
             s.drawImages = true;
@@ -169,15 +165,22 @@ public class SelectorImage extends Selector
         if (this.models != null)
             s.drawModels = true;
 
-        s.buttonList.objHeight *= 2;
-        s.buttonList.objWidth = s.buttonList.objHeight;
-        s.buttonList.objXSpace = s.buttonList.objWidth + 30;
-        s.buttonList.objYSpace = s.buttonList.objHeight + 30;
+        s.buttonList.buttonHeight *= 2;
+        s.buttonList.buttonWidth = s.buttonList.buttonHeight;
+        s.buttonList.buttonXSpace = s.buttonList.buttonWidth + 30;
+        s.buttonList.buttonYSpace = s.buttonList.buttonHeight + 30;
         s.buttonList.hideText = true;
         s.buttonList.rows = 3;
         s.buttonList.columns = 10;
         s.buttonList.sortButtons();
         s.drawBehindScreen = this.drawBehindScreen;
-        Game.screen = s;
+        return s;
+    }
+
+    @Override
+    public void setScreen()
+    {
+        this.resetLayout();
+        Game.screen = getSelectorScreen();
     }
 }

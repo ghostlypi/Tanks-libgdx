@@ -36,6 +36,18 @@ public class NoShapeRenderer extends BaseShapeRenderer
     }
 
     @Override
+    public void fillPartialRing(double x, double y, double size, double thickness, double start, double end)
+    {
+
+    }
+
+    @Override
+    public void fillPartialRing(double x, double y, double z, double size, double thickness, double start, double end)
+    {
+
+    }
+
+    @Override
     public void fillGlow(double x, double y, double sX, double sY)
     {
 
@@ -108,7 +120,13 @@ public class NoShapeRenderer extends BaseShapeRenderer
     }
 
     @Override
-    public void fillRect(double x, double y, double sX, double sY, double radius)
+    public void fillRect(double x, double y, double z, double sX, double sY, boolean depthTest)
+    {
+
+    }
+
+    @Override
+    public void fillRoundedRect(double x, double y, double sX, double sY, double radius)
     {
 
     }

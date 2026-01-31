@@ -1,12 +1,17 @@
 package tanks.tank;
 
 import tanks.*;
+import tanks.attribute.AttributeModifier;
 import tanks.gui.screen.ScreenGame;
+import tanks.tankson.Property;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 
 public class TankRemote extends Tank
 {
+	public static ArrayList<Field> fieldsToClone;
+
 	public final boolean isCopy;
 	public final Tank tank;
 
@@ -61,7 +66,7 @@ public class TankRemote extends Tank
 	
 	public TankRemote(Tank t)
 	{
-		super(t.name, t.posX, t.posY, t.size, t.colorR, t.colorG, t.colorB);
+		super(t.name, t.posX, t.posY, t.size, t.color.red, t.color.green, t.color.blue);
 		this.angle = t.angle;
 		this.orientation = t.orientation;
 		this.team = t.team;
@@ -74,50 +79,51 @@ public class TankRemote extends Tank
 		this.drawAge = t.drawAge;
 		this.managedMotion = false;
 
+		if (t instanceof TankAIControlled)
+		{
+			((TankAIControlled) t).bulletItem.item.bullet = ((TankAIControlled) t).getBullet();
+			((TankAIControlled) t).mineItem.item.mine = ((TankAIControlled) t).getMine();
+
+			((TankAIControlled) t).bulletItem.item.cooldownBase = Math.min(1, ((TankAIControlled) t).cooldownBase);
+			if (((TankAIControlled) t).cooldownRandom > 0)
+				((TankAIControlled) t).bulletItem.item.cooldownBase = Math.max(((TankAIControlled) t).bulletItem.item.cooldownBase, Double.MIN_VALUE);
+		}
+
 		this.copyTank(t);
 
 		this.invulnerable = true;
 
-		this.setNetworkID(t.networkID);
+		if (t.networkID >= 0)
+			this.setNetworkID(t.networkID);
 	}
 
 	public void copyTank(Tank t)
 	{
-		this.turretLength = t.turretLength;
-		this.turretSize = t.turretSize;
-		this.colorR = t.colorR;
-		this.colorG = t.colorG;
-		this.colorB = t.colorB;
-		this.secondaryColorR = t.secondaryColorR;
-		this.secondaryColorG = t.secondaryColorG;
-		this.secondaryColorB = t.secondaryColorB;
-		this.enableTertiaryColor = t.enableTertiaryColor;
-		this.tertiaryColorR = t.tertiaryColorR;
-		this.tertiaryColorG = t.tertiaryColorG;
-		this.tertiaryColorB = t.tertiaryColorB;
-		this.emblem = t.emblem;
-		this.emblemR = t.emblemR;
-		this.emblemG = t.emblemG;
-		this.emblemB = t.emblemB;
-		this.description = t.description;
-		this.baseModel = t.baseModel;
-		this.colorModel = t.colorModel;
-		this.turretBaseModel = t.turretBaseModel;
-		this.turretModel = t.turretModel;
-		this.mandatoryKill = t.mandatoryKill;
-		this.luminance = t.luminance;
-		this.glowIntensity = t.glowIntensity;
-		this.glowSize = t.glowSize;
-		this.lightSize = t.lightSize;
-		this.lightIntensity = t.lightIntensity;
-		this.setBullet(t.bullet);
-		this.mine = t.mine;
-		this.musicTracks = t.musicTracks;
-		this.fromRegistry = t.fromRegistry;
-		this.trackSpacing = t.trackSpacing;
-		this.enableTracks = t.enableTracks;
-		this.multipleTurrets = t.multipleTurrets;
-		this.bullet.shotCount = t.bullet.shotCount;
+		if (fieldsToClone == null)
+			initFieldsToClone();
+
+		try
+		{
+			for (Field field : fieldsToClone)
+			{
+				field.set(this, field.get(t));
+			}
+		}
+		catch (IllegalAccessException e)
+		{
+			throw new RuntimeException(e);
+		}
+	}
+
+	private static void initFieldsToClone()
+	{
+		fieldsToClone = new ArrayList<>();
+
+		for (Field field : Tank.class.getFields())
+		{
+			if (field.getAnnotation(Property.class) != null && !field.getName().equals("name"))
+				fieldsToClone.add(field);
+		}
 	}
 
 	@Override
@@ -136,13 +142,22 @@ public class TankRemote extends Tank
 
 		super.update();
 
+		if (this.destroy)
+		{
+			this.vX = 0;
+			this.vY = 0;
+			return;
+		}
+
 		double pvx = this.prevKnownVXFinal;
 		double pvy = this.prevKnownVYFinal;
-		double cvx = this.getAttributeValue(AttributeModifier.velocity, this.currentKnownVX) * ScreenGame.finishTimer / ScreenGame.finishTimerMax;
-		double cvy = this.getAttributeValue(AttributeModifier.velocity, this.currentKnownVY) * ScreenGame.finishTimer / ScreenGame.finishTimerMax;
+		double cvx = em().getAttributeValue(AttributeModifier.velocity, this.currentKnownVX) * ScreenGame.finishTimer / ScreenGame.finishTimerMax;
+		double cvy = em().getAttributeValue(AttributeModifier.velocity, this.currentKnownVY) * ScreenGame.finishTimer / ScreenGame.finishTimerMax;
 
 		this.posX = cubicInterpolationVelocity(this.prevKnownPosX, pvx, this.currentKnownPosX, cvx, this.timeSinceRefresh, this.interpolationTime);
 		this.posY = cubicInterpolationVelocity(this.prevKnownPosY, pvy, this.currentKnownPosY, cvy, this.timeSinceRefresh, this.interpolationTime);
+//		this.posX = this.currentKnownPosX;
+//		this.posY = this.currentKnownPosY;
 		double frac = Math.min(1, this.timeSinceRefresh / this.interpolationTime);
 		this.vX = (1 - frac) * this.prevKnownVX + frac * this.currentKnownVX;
 		this.vY = (1 - frac) * this.prevKnownVY + frac * this.currentKnownVY;
@@ -150,7 +165,7 @@ public class TankRemote extends Tank
 		this.lastFinalVX = (this.posX - this.lastPosX) / Panel.frameFrequency;
 		this.lastFinalVY = (this.posY - this.lastPosY) / Panel.frameFrequency;
 
-		double angDiff = Movable.angleBetween(this.lastAngle, this.currentAngle);
+		double angDiff = GameObject.angleBetween(this.lastAngle, this.currentAngle);
 		this.angle = this.lastAngle - frac * angDiff;
 		this.pitch = (1 - frac) * this.lastPitch + frac * this.currentPitch;
 
@@ -176,10 +191,10 @@ public class TankRemote extends Tank
 			double dist = Math.sqrt(Math.pow(this.posX - this.lastPosX, 2) + Math.pow(this.posY - this.lastPosY, 2));
 
 			double dir = Math.PI + this.getAngleInDirection(this.lastPosX, this.lastPosY);
-			if (Movable.absoluteAngleBetween(this.orientation, dir) <= Movable.absoluteAngleBetween(this.orientation + Math.PI, dir))
-				this.orientation -= Movable.angleBetween(this.orientation, dir) / 20 * dist;
+			if (GameObject.absoluteAngleBetween(this.orientation, dir) <= GameObject.absoluteAngleBetween(this.orientation + Math.PI, dir))
+				this.orientation -= GameObject.angleBetween(this.orientation, dir) / 20 * dist;
 			else
-				this.orientation -= Movable.angleBetween(this.orientation + Math.PI, dir) / 20 * dist;
+				this.orientation -= GameObject.angleBetween(this.orientation + Math.PI, dir) / 20 * dist;
 		}
 	}
 
@@ -200,12 +215,9 @@ public class TankRemote extends Tank
 					for (int i = 0; i < 50 * Game.effectMultiplier; i++)
 					{
 						Effect e = Effect.createNewEffect(this.posX, this.posY, Effect.EffectType.piece);
-						double var = 50;
-						e.colR = Math.min(255, Math.max(0, this.colorR + Math.random() * var - var / 2));
-						e.colG = Math.min(255, Math.max(0, this.colorG + Math.random() * var - var / 2));
-						e.colB = Math.min(255, Math.max(0, this.colorB + Math.random() * var - var / 2));
+                        e.setColorsFromTank(this);
 
-						if (Game.enable3d)
+                        if (Game.enable3d)
 							e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * this.size / 50.0);
 						else
 							e.setPolarMotion(Math.random() * 2 * Math.PI, Math.random() * this.size / 50.0);
@@ -217,10 +229,14 @@ public class TankRemote extends Tank
 
 			for (int i = 0; i < Game.tile_size * 2 - this.localAge; i++)
 			{
-				Drawing.drawing.setColor(this.colorR, this.colorG, this.colorB, (this.size * 2 - i - this.localAge) * 2.55);
+				Drawing.drawing.setColor(this.color, (this.size * 2 - i - this.localAge) * 2.55);
 				Drawing.drawing.fillOval(this.posX, this.posY, i, i);
 			}
 		}
+
+		/*Drawing.drawing.setInterfaceFontSize(24);
+		Drawing.drawing.setColor(0, 0, 0);
+		Drawing.drawing.drawInterfaceText(Drawing.drawing.toInterfaceCoordsX(prevKnownPosX), Drawing.drawing.toInterfaceCoordsY(prevKnownPosY), String.format("%d, %d, %.2f", (int) posX / 50, (int) posY / 50, timeSinceRefresh));*/
 	}
 
 	public static double cubicInterpolationVelocity(double startPos, double startVel, double endPos, double endVel, double curTime, double totalTime)

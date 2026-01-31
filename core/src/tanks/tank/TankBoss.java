@@ -1,8 +1,7 @@
 package tanks.tank;
 
 import tanks.Game;
-import tanks.bullet.Bullet;
-import tanks.bullet.DefaultBullets;
+import tanks.bullet.DefaultItems;
 
 /**
  * A big boss tank which spawns other tanks and takes 5 regular bullets to destroy
@@ -18,17 +17,17 @@ public class TankBoss extends TankAIControlled
 		this.cooldownRandom = 200;
 		this.cooldownBase = 100;
 		this.aimAccuracyOffset = 0;
+        this.friction += 0.15;
 
-		this.setBullet(DefaultBullets.mega_bullet);
-		this.bullet.maxLiveBullets = 4;
+		this.setBullet(DefaultItems.mega_bullet);
+		this.getBullet().maxLiveBullets = 4;
+		this.getBullet().recoil = 0;
 
 		if (Game.tankTextures)
 		{
-			this.colorModel = TankModels.fixed.color;
+			this.colorSkin = TankModels.fixed;
 			this.emblem = "emblems/star.png";
-			this.emblemR = this.secondaryColorR;
-			this.emblemG = this.secondaryColorG;
-			this.emblemB = this.secondaryColorB;
+			this.emblemColor.set(this.secondaryColor);
 		}
 
 		this.spawnedTankEntries.add(new SpawnedTankEntry(new TankReference("brown"), 1));

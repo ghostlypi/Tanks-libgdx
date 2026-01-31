@@ -6,7 +6,6 @@ import tanks.gui.Button;
 import tanks.gui.TextBoxSlider;
 import tanks.gui.screen.Screen;
 import tanks.gui.screen.ScreenOptions;
-import tanks.tank.TankDummy;
 import tanks.tank.TankPlayer;
 
 public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
@@ -51,7 +50,7 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
             if (teamRed.inputText.length() <= 0)
                 teamRed.inputText = "0";
 
-            team.teamColorR = Integer.parseInt(teamRed.inputText);
+            team.teamColor.red = Integer.parseInt(teamRed.inputText);
         }
                 , 0, 0, 255, 1);
 
@@ -66,7 +65,7 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
             if (teamGreen.inputText.length() <= 0)
                 teamGreen.inputText = "0";
 
-            team.teamColorG = Integer.parseInt(teamGreen.inputText);
+            team.teamColor.green = Integer.parseInt(teamGreen.inputText);
         }
                 , 0, 0, 255, 1);
 
@@ -81,7 +80,7 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
             if (teamBlue.inputText.length() <= 0)
                 teamBlue.inputText = "0";
 
-            team.teamColorB = Integer.parseInt(teamBlue.inputText);
+            team.teamColor.blue = Integer.parseInt(teamBlue.inputText);
         }
                 , 0, 0, 255, 1);
 
@@ -91,13 +90,13 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
         teamBlue.maxValue = 255;
         teamBlue.checkMaxValue = true;
 
-        teamRed.value = team.teamColorR;
-        teamGreen.value = team.teamColorG;
-        teamBlue.value = team.teamColorB;
+        teamRed.value = team.teamColor.red;
+        teamGreen.value = team.teamColor.green;
+        teamBlue.value = team.teamColor.blue;
 
-        teamRed.inputText = (int) team.teamColorR + "";
-        teamGreen.inputText = (int) team.teamColorG + "";
-        teamBlue.inputText = (int) team.teamColorB + "";
+        teamRed.inputText = (int) team.teamColor.red + "";
+        teamGreen.inputText = (int) team.teamColor.green + "";
+        teamBlue.inputText = (int) team.teamColor.blue + "";
     }
 
     public void update()
@@ -121,8 +120,7 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
         super.draw();
 
         Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1200, 720);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1180, 700);
+        Drawing.drawing.drawPopup(this.centerX, this.centerY, 1200, 720);
 
         back.draw();
 
@@ -149,9 +147,9 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
             teamBlue.b1 = 0;
             teamBlue.b2 = 255;
 
-            this.team.teamColorR = teamRed.value;
-            this.team.teamColorG = teamGreen.value;
-            this.team.teamColorB = teamBlue.value;
+            this.team.teamColor.red = teamRed.value;
+            this.team.teamColor.green = teamGreen.value;
+            this.team.teamColor.blue = teamBlue.value;
 
             teamBlue.draw();
             teamGreen.draw();
@@ -165,5 +163,11 @@ public class OverlayEditTeamColor extends ScreenLevelEditorOverlay
         Drawing.drawing.setInterfaceFontSize(this.titleSize);
         Drawing.drawing.setColor(255, 255, 255);
         Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - 270, "Team color: %s", this.team.name);
+    }
+
+    @Override
+    public void setupLayoutParameters()
+    {
+        this.setUnscaledLayoutParameters();
     }
 }

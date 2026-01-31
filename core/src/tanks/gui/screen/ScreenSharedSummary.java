@@ -26,7 +26,7 @@ public class ScreenSharedSummary extends Screen
     }
     );
 
-    public Button levels = new Button(this.centerX + this.objXSpace, this.centerY - 90, this.objWidth, this.objHeight, "More levels", () ->
+    public Button levels = new Button(this.centerX + this.objXSpace, this.centerY - this.objYSpace * 1, this.objWidth, this.objHeight, "More levels", () ->
     {
         if (ScreenPartyHost.isServer)
             Game.screen = new ScreenSharedLevels(ScreenPartyHost.activeScreen.sharedLevels);
@@ -34,7 +34,7 @@ public class ScreenSharedSummary extends Screen
             Game.screen = new ScreenSharedLevels(ScreenPartyLobby.sharedLevels);
     });
 
-    public Button crusades = new Button(this.centerX + this.objXSpace, this.centerY + 150, this.objWidth, this.objHeight, "More crusades", () ->
+    public Button crusades = new Button(this.centerX + this.objXSpace, this.centerY + this.objYSpace * 3, this.objWidth, this.objHeight, "More crusades", () ->
     {
         if (ScreenPartyHost.isServer)
             Game.screen = new ScreenSharedCrusades(ScreenPartyHost.activeScreen.sharedCrusades);
@@ -59,7 +59,10 @@ public class ScreenSharedSummary extends Screen
             buttons.add(new Button(0, 0, this.objWidth, this.objHeight, l.name.replace("_", " "), () ->
             {
                 Crusade c = new Crusade(l.crusade, l.name);
-                Game.screen = new ScreenCrusadePreview(c, Game.screen, false);
+
+                ScreenCrusadePreview sc = new ScreenCrusadePreview(c, Game.screen, false);
+                sc.setOffset(sc.objHeight);
+                Game.screen = sc;
             }
                     , "Shared by " + l.creator));
         }

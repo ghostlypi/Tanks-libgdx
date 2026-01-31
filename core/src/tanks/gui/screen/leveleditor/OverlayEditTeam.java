@@ -14,6 +14,8 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
     public TextBox teamName;
     public Team team;
 
+    public Runnable onEscape = () -> {};
+
     public OverlayEditTeam(Screen previous, ScreenLevelEditor screenLevelEditor, Team team)
     {
         super(previous, screenLevelEditor);
@@ -66,7 +68,7 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
         @Override
         public void run()
         {
-            screenLevelEditor.teams.remove(team);
+            editor.teams.remove(team);
 
             for (Movable m: Game.movables)
             {
@@ -95,9 +97,16 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
 
     public Button teamColor = new Button(this.centerX, this.centerY + this.objYSpace, this.objWidth, this.objHeight, "Team color", () ->
         {
-            Game.screen = new OverlayEditTeamColor(Game.screen, screenLevelEditor, team);
+            Game.screen = new OverlayEditTeamColor(Game.screen, editor, team);
         }
     );
+
+    @Override
+    public void escape()
+    {
+        this.onEscape.run();
+        super.escape();
+    }
 
     public void update()
     {
@@ -115,8 +124,7 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
         super.draw();
 
         Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1200, 720);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1180, 700);
+        Drawing.drawing.drawPopup(this.centerX, this.centerY, 1200, 720);
 
         back.draw();
         teamName.draw();
@@ -126,8 +134,8 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
 
         if (team.enableColor)
         {
-            Drawing.drawing.setColor(team.teamColorR, team.teamColorG, team.teamColorB);
-            Drawing.drawing.fillOval(teamColor.posX - teamColor.sizeX / 2 + teamColor.sizeY / 2, teamColor.posY, teamColor.sizeY * 0.8, teamColor.sizeY * 0.8);
+            Drawing.drawing.setColor(team.teamColor);
+            Drawing.drawing.fillInterfaceOval(teamColor.posX - teamColor.sizeX / 2 + teamColor.sizeY / 2, teamColor.posY, teamColor.sizeY * 0.8, teamColor.sizeY * 0.8);
         }
 
         Drawing.drawing.setColor(255, 255, 255);
@@ -135,7 +143,13 @@ public class OverlayEditTeam extends ScreenLevelEditorOverlay
         Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - 270, "Edit team");
 
         if (team.enableColor)
-            Drawing.drawing.setColor(team.teamColorR, team.teamColorG, team.teamColorB);
+            Drawing.drawing.setColor(team.teamColor);
         Drawing.drawing.drawInterfaceText(this.centerX, this.centerY - this.objYSpace * 3, this.team.name);
+    }
+
+    @Override
+    public void setupLayoutParameters()
+    {
+        this.setUnscaledLayoutParameters();
     }
 }

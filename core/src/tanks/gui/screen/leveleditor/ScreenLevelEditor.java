@@ -1,2236 +1,2246 @@
 package tanks.gui.screen.leveleditor;
 
 import basewindow.BaseFile;
+import basewindow.InputCodes;
 import basewindow.InputPoint;
 import tanks.*;
 import tanks.gui.Button;
+import tanks.gui.input.InputBindingGroup;
 import tanks.gui.screen.*;
+import tanks.gui.screen.leveleditor.EditorButtons.EditorButton;
+import tanks.gui.screen.leveleditor.selector.MetadataSelector;
 import tanks.item.Item;
 import tanks.network.event.INetworkEvent;
 import tanks.obstacle.Obstacle;
 import tanks.obstacle.ObstacleBeatBlock;
+import tanks.obstacle.ObstacleStackable;
 import tanks.obstacle.ObstacleUnknown;
-import tanks.tank.Tank;
-import tanks.tank.TankAIControlled;
-import tanks.tank.TankPlayer;
-import tanks.tank.TankSpawnMarker;
+import tanks.registry.RegistryObstacle;
+import tanks.registry.RegistryTank;
+import tanks.tank.*;
+import tanks.tankson.Serializer;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Objects;
+import java.util.*;
 
+@SuppressWarnings("unused")
 public class ScreenLevelEditor extends Screen implements ILevelPreviewScreen
 {
-	public ArrayList<Action> actions = new ArrayList<>();
-	public ArrayList<Action> redoActions = new ArrayList<>();
-	public int redoLength = -1;
-
-	public Placeable currentPlaceable = Placeable.enemyTank;
-
-	public int tankPage = 0;
-	public int obstaclePage = 0;
-
-	public int tankNum = 0;
-	public int obstacleNum = 0;
-	public int teamNum = 1;
-	public int playerTeamNum = 0;
-	public Tank mouseTank = Game.registryTank.getEntry(tankNum).getTank(0, 0, 0);
-	public int mouseTankOrientation = 0;
-	public Obstacle mouseObstacle = Game.registryObstacle.getEntry(obstacleNum).getObstacle(0, 0);
-	public double mouseObstacleHeight = 1;
-	public double mouseObstacleStartHeight = 0;
-	public boolean stagger = false;
-	public boolean oddStagger = false;
-	public int mouseObstacleGroup = 0;
-	public int mouseObstacleBeatPattern = 0;
-	public boolean paused = false;
-	public boolean objectMenu = false;
-
-	public double clickCooldown = 0;
-	public ArrayList<Team> teams = new ArrayList<>();
-	public ArrayList<TankSpawnMarker> spawns = new ArrayList<>();
-
-	public Level level;
-	public String name;
-	public boolean movePlayer = true;
-	public boolean eraseMode = false;
-	public boolean changeCameraMode = false;
-	public boolean selectMode = false;
-	public boolean pasteMode = false;
-	public boolean symmetrySelectMode = false;
-
-	public double selectX1;
-	public double selectY1;
-	public double selectX2;
-	public double selectY2;
-
-	public enum SymmetryType {none, flipHorizontal, flipVertical, flipBoth, flip8, rot180, rot90};
-	public SymmetryType symmetryType = SymmetryType.none;
-	public double symmetryX1;
-	public double symmetryY1;
-	public double symmetryX2;
-	public double symmetryY2;
-
-	public boolean selectHeld = false;
-	public boolean selectInverted = false;
-	public boolean selection = false;
-	public boolean selectAdd = true;
-	public boolean selectSquare = false;
-	public boolean[][] selectedTiles;
-	public boolean showControls = true;
-	public double controlsSizeMultiplier = 0.75;
-
-	public boolean panDown;
-	public double panX;
-	public double panY;
-	public double panCurrentX;
-	public double panCurrentY;
-	public double zoomCurrentX;
-	public double zoomCurrentY;
-	public boolean zoomDown;
-	public double zoomDist;
-	public double offsetX;
-	public double offsetY;
-	public double zoom = 1;
-	public int validZoomFingers = 0;
-
-	public HashSet<String> prevTankMusics = new HashSet<>();
-	public HashSet<String> tankMusics = new HashSet<>();
-	public HashSet<String> overlayMusics = new HashSet<>();
-
-	public ArrayList<Object> clipboard = new ArrayList<>();
-
-	public double fontBrightness = 0;
-
-	Button pause = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayEditorMenu(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Level menu (%s)", Game.game.input.editorPause.getInputs()
-	);
-
-	Button menu = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		objectMenu = true;
-		Game.screen = new OverlayObjectMenu(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Object menu (%s)", Game.game.input.editorObjectMenu.getInputs()
-	);
-
-	public Button recenter = new Button(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 1.5, 300, 35, "Re-center", new Runnable()
-	{
-		@Override
-		public void run()
-		{
-			zoom = 1;
-			offsetX = 0;
-			offsetY = 0;
-		}
-	}
-	);
-
-	Button playControl = new Button(0, -1000, 70, 70, "", () ->
-	{
-		clickCooldown = 20;
-		play();
-	}, "Play (%s)", Game.game.input.editorPlay.getInputs()
-	);
-
-	Button place = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		selectMode = false;
-		changeCameraMode = false;
-		eraseMode = false;
-		pasteMode = false;
-	}, "Build (%s)", Game.game.input.editorBuild.getInputs()
-	);
-
-	Button erase = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		selectMode = false;
-		changeCameraMode = false;
-		eraseMode = true;
-		pasteMode = false;
-
-	}, "Erase (%s)", Game.game.input.editorErase.getInputs()
-	);
-
-	Button panZoom = new Button(0, -1000, 70, 70, "", () -> changeCameraMode = true, "Adjust camera (%s)", Game.game.input.editorCamera.getInputs());
-
-	Button select = new Button(0, -1000, 70, 70, "", () ->
-	{
-		selectMode = true;
-		changeCameraMode = false;
-		pasteMode = false;
-	}, "Select (%s)", Game.game.input.editorSelect.getInputs()
-	);
-
-	Button undo = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		Action a = actions.remove(actions.size() - 1);
-		a.undo();
-		redoActions.add(a);
-		redoLength = actions.size();
-	}, "Undo (%s)", Game.game.input.editorUndo.getInputs()
-	);
-
-	Button redo = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		Action a = redoActions.remove(redoActions.size() - 1);
-		a.redo();
-		actions.add(a);
-		redoLength = actions.size();
-	}, "Redo (%s)", Game.game.input.editorRedo.getInputs()
-	);
-
-	Button copy = new Button(0, -1000, 70, 70, "", () ->
-	{
-		this.copy(false);
-	}, "Copy (%s)", Game.game.input.editorCopy.getInputs());
-
-	Button cut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		this.copy(true);
-	}, "Cut (%s)", Game.game.input.editorCut.getInputs());
-
-	Button paste = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		selectMode = false;
-		changeCameraMode = false;
-		eraseMode = false;
-		pasteMode = true;
-	}, "Paste (%s)", Game.game.input.editorPaste.getInputs() );
-
-	Button rotateShortcut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayRotateTank(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Tank orientation (%s)", Game.game.input.editorRotate.getInputs()
-	);
-
-	Button teamShortcut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayTeams(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Tank team (%s)", Game.game.input.editorTeam.getInputs()
-	);
-
-	Button heightShortcut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayBlockHeight(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Block height (%s)", Game.game.input.editorHeight.getInputs()
-	);
-
-	Button groupShortcut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayBlockGroupID(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Block group ID (%s)", Game.game.input.editorGroupID.getInputs()
-	);
-
-	Button beatPatternShortcut = new Button(0, -1000, 70, 70, "", () ->
-	{
-		paused = true;
-		Game.screen = new OverlayBeatBlockPattern(Game.screen, (ScreenLevelEditor) Game.screen);
-	}, "Beat pattern (%s)", Game.game.input.editorGroupID.getInputs()
-	);
-
-	Button selectSquareToggle = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		selectSquare = !selectSquare;
-	}, "Lock square selecting (Hold: %s, Toggle: %s)", Game.game.input.editorHoldSquare.getInputs(), Game.game.input.editorLockSquare.getInputs()
-	);
-
-	Button selectAddToggle = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		selectAdd = !selectAdd;
-	}, "Toggle select/deselect (%s)", Game.game.input.editorSelectAddToggle.getInputs()
-	);
-
-	Button selectClear = new Button(0, -1000, 70, 70, "", () ->
-	{
-		Game.game.window.pressedKeys.clear();
-		Game.game.window.pressedButtons.clear();
-
-		clearSelection();
-	}, "Clear selection (%s)", Game.game.input.editorDeselect.getInputs()
-	);
-
-	@SuppressWarnings("unchecked")
-	protected ArrayList<IDrawable>[] drawables = (ArrayList<IDrawable>[])(new ArrayList[10]);
-
-	public ScreenLevelEditor(String lvlName, Level level)
-	{
-		this.selfBatch = false;
-		this.drawDarkness = false;
-
-		this.music = "battle_editor.ogg";
-		this.musicID = "editor";
-
-		this.allowClose = false;
-
-		if (Game.game.window.touchscreen)
-			controlsSizeMultiplier = 1.0;
-
-		this.level = level;
-
-		place.sizeX *= controlsSizeMultiplier;
-		place.sizeY *= controlsSizeMultiplier;
-		place.fullInfo = true;
-
-		erase.sizeX *= controlsSizeMultiplier;
-		erase.sizeY *= controlsSizeMultiplier;
-		erase.fullInfo = true;
-
-		panZoom.sizeX *= controlsSizeMultiplier;
-		panZoom.sizeY *= controlsSizeMultiplier;
-		panZoom.fullInfo = true;
-
-		select.sizeX *= controlsSizeMultiplier;
-		select.sizeY *= controlsSizeMultiplier;
-		select.fullInfo = true;
-
-		paste.sizeX *= controlsSizeMultiplier;
-		paste.sizeY *= controlsSizeMultiplier;
-		paste.fullInfo = true;
-
-		pause.sizeX *= controlsSizeMultiplier;
-		pause.sizeY *= controlsSizeMultiplier;
-		pause.fullInfo = true;
-
-		menu.sizeX *= controlsSizeMultiplier;
-		menu.sizeY *= controlsSizeMultiplier;
-		menu.fullInfo = true;
-
-		playControl.sizeX *= controlsSizeMultiplier;
-		playControl.sizeY *= controlsSizeMultiplier;
-		playControl.fullInfo = true;
-
-		undo.sizeX *= controlsSizeMultiplier;
-		undo.sizeY *= controlsSizeMultiplier;
-		undo.fullInfo = true;
-
-		redo.sizeX *= controlsSizeMultiplier;
-		redo.sizeY *= controlsSizeMultiplier;
-		redo.fullInfo = true;
-
-		heightShortcut.sizeX *= controlsSizeMultiplier;
-		heightShortcut.sizeY *= controlsSizeMultiplier;
-		heightShortcut.fullInfo = true;
-
-		groupShortcut.sizeX *= controlsSizeMultiplier;
-		groupShortcut.sizeY *= controlsSizeMultiplier;
-		groupShortcut.fullInfo = true;
-
-		beatPatternShortcut.sizeX *= controlsSizeMultiplier;
-		beatPatternShortcut.sizeY *= controlsSizeMultiplier;
-		beatPatternShortcut.fullInfo = true;
-
-		teamShortcut.sizeX *= controlsSizeMultiplier;
-		teamShortcut.sizeY *= controlsSizeMultiplier;
-		teamShortcut.fullInfo = true;
-
-		rotateShortcut.sizeX *= controlsSizeMultiplier;
-		rotateShortcut.sizeY *= controlsSizeMultiplier;
-		rotateShortcut.fullInfo = true;
-
-		selectClear.sizeX *= controlsSizeMultiplier;
-		selectClear.sizeY *= controlsSizeMultiplier;
-		selectClear.fullInfo = true;
-
-		selectAddToggle.sizeX *= controlsSizeMultiplier;
-		selectAddToggle.sizeY *= controlsSizeMultiplier;
-		selectAddToggle.fullInfo = true;
-
-		selectSquareToggle.sizeX *= controlsSizeMultiplier;
-		selectSquareToggle.sizeY *= controlsSizeMultiplier;
-		selectSquareToggle.fullInfo = true;
-
-		copy.sizeX *= controlsSizeMultiplier;
-		copy.sizeY *= controlsSizeMultiplier;
-		copy.fullInfo = true;
-
-		cut.sizeX *= controlsSizeMultiplier;
-		cut.sizeY *= controlsSizeMultiplier;
-		cut.fullInfo = true;
-
-		this.enableMargins = false;
-
-		for (int i = 0; i < drawables.length; i++)
-		{
-			drawables[i] = new ArrayList<>();
-		}
-
-		Obstacle.draw_size = Game.tile_size;
-
-		Game.game.window.validScrollDown = false;
-		Game.game.window.validScrollUp = false;
-
-		this.name = lvlName;
-
-		if (this.teams.size() == 0)
-			mouseTank.team = null;
-		else
-			mouseTank.team = this.teams.get(teamNum);
-	}
-
-	public void updateMusic(boolean tanks)
-	{
-		this.prevTankMusics.clear();
-		this.prevTankMusics.addAll(this.tankMusics);
-		this.tankMusics.clear();
-
-		this.tankMusics.addAll(this.overlayMusics);
-		this.overlayMusics.clear();
-
-		if (tanks)
-		{
-			for (Movable m : Game.movables)
-			{
-				if (m instanceof Tank && !m.destroy)
-				{
-					this.tankMusics.addAll(((Tank) m).musicTracks);
-				}
-			}
-
-			Game.currentLevel.beatBlocks = 0;
-			for (Obstacle o: Game.obstacles)
-			{
-				if (o instanceof ObstacleBeatBlock)
-				{
-					Game.currentLevel.synchronizeMusic = true;
-					Game.currentLevel.beatBlocks |= (int) ((ObstacleBeatBlock) o).beatFrequency;
-					break;
-				}
-			}
-
-			if (Game.currentLevel.beatBlocks > 0)
-			{
-				this.tankMusics.add("beatblocks/beat_blocks.ogg");
-			}
-		}
-
-		for (String m : this.prevTankMusics)
-		{
-			if (!this.tankMusics.contains(m))
-				Drawing.drawing.removeSyncedMusic(m, 500);
-		}
-
-		for (String m : this.tankMusics)
-		{
-			if (!this.prevTankMusics.contains(m))
-				Drawing.drawing.addSyncedMusic(m, Game.musicVolume * 0.5f, true, 500);
-		}
-	}
-
-	@Override
-	public void update()
-	{
-		if (Level.isDark())
-			this.fontBrightness = 255;
-		else
-			this.fontBrightness = 0;
-
-		clickCooldown = Math.max(0, clickCooldown - Panel.frameFrequency);
-
-		this.updateMusic(true);
-
-		if (showControls)
-		{
-			boolean vertical = Drawing.drawing.interfaceScale * Drawing.drawing.interfaceSizeY >= Game.game.window.absoluteHeight - Drawing.drawing.statsHeight - 0.001;
-			double vStep = 0;
-			double hStep = 0;
-
-			if (vertical)
-				vStep = 100 * controlsSizeMultiplier;
-			else
-				hStep = 100 * controlsSizeMultiplier;
-
-			pause.posX = (Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeX) / 2
-					+ Drawing.drawing.interfaceSizeX - 50 * controlsSizeMultiplier - Game.game.window.getEdgeBounds() / Drawing.drawing.interfaceScale;
-			pause.posY = -((Game.game.window.absoluteHeight - Drawing.drawing.statsHeight) / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeY) / 2 + 50 * controlsSizeMultiplier;
-			pause.update();
-
-			menu.posX = pause.posX - hStep;
-			menu.posY = pause.posY + vStep;
-			menu.update();
-
-			playControl.enabled = spawns.size() > 0;
-			playControl.posX = pause.posX - hStep * 2;
-			playControl.posY = pause.posY + vStep * 2;
-			playControl.update();
-
-
-			if (changeCameraMode)
-			{
-				place.enabled = true;
-				erase.enabled = true;
-				select.enabled = true;
-				panZoom.enabled = false;
-				paste.enabled = true;
-			}
-			else if (pasteMode)
-			{
-				place.enabled = true;
-				erase.enabled = true;
-				select.enabled = true;
-				panZoom.enabled = true;
-				paste.enabled = false;
-			}
-			else if (selectMode)
-			{
-				place.enabled = true;
-				erase.enabled = true;
-				select.enabled = false;
-				panZoom.enabled = true;
-				paste.enabled = true;
-			}
-			else if (eraseMode)
-			{
-				place.enabled = true;
-				erase.enabled = false;
-				select.enabled = true;
-				panZoom.enabled = true;
-				paste.enabled = true;
-			}
-			else
-			{
-				place.enabled = false;
-				erase.enabled = true;
-				select.enabled = true;
-				panZoom.enabled = true;
-				paste.enabled = true;
-			}
-
-			place.posX = -(Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeX) / 2
-					+ Game.game.window.getEdgeBounds() / Drawing.drawing.interfaceScale + 50 * controlsSizeMultiplier;
-			place.posY = -((Game.game.window.absoluteHeight - Drawing.drawing.statsHeight) / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeY) / 2 + 50 * controlsSizeMultiplier;
-			place.update();
-
-			erase.posX = place.posX + hStep;
-			erase.posY = place.posY + vStep;
-			erase.update();
-
-			select.posX = erase.posX + hStep;
-			select.posY = erase.posY + vStep;
-			select.update();
-
-			panZoom.posX = select.posX + hStep;
-			panZoom.posY = select.posY + vStep;
-			panZoom.update();
-
-			paste.posX = panZoom.posX + hStep;
-			paste.posY = panZoom.posY + vStep;
-
-			if (clipboard.size() > 0)
-				paste.update();
-
-			undo.enabled = actions.size() > 0;
-			undo.posX = -(Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeX) / 2
-					+ Game.game.window.getEdgeBounds() / Drawing.drawing.interfaceScale + 50 * controlsSizeMultiplier;
-			undo.posY = ((Game.game.window.absoluteHeight - Drawing.drawing.statsHeight) / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeY) / 2
-					+ Drawing.drawing.interfaceSizeY - 50 * controlsSizeMultiplier;
-			undo.update();
-
-			redo.enabled = redoActions.size() > 0;
-			redo.posX = undo.posX + hStep;
-			redo.posY = undo.posY - vStep;
-			redo.update();
-
-			heightShortcut.posX = (Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeX) / 2
-					+ Drawing.drawing.interfaceSizeX - 50 * controlsSizeMultiplier - Game.game.window.getEdgeBounds() / Drawing.drawing.interfaceScale;
-			heightShortcut.posY = ((Game.game.window.absoluteHeight - Drawing.drawing.statsHeight) / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeY) / 2
-					+ Drawing.drawing.interfaceSizeY - 50 * controlsSizeMultiplier;
-
-			groupShortcut.posX = heightShortcut.posX;
-			groupShortcut.posY = heightShortcut.posY;
-
-			rotateShortcut.posX = heightShortcut.posX;
-			rotateShortcut.posY = heightShortcut.posY;
-
-			teamShortcut.posX = heightShortcut.posX - hStep;
-			teamShortcut.posY = heightShortcut.posY - vStep;
-
-			beatPatternShortcut.posX = teamShortcut.posX;
-			beatPatternShortcut.posY = teamShortcut.posY;
-
-			selectSquareToggle.posX = heightShortcut.posX;
-			selectSquareToggle.posY = heightShortcut.posY;
-
-			selectAddToggle.posX = selectSquareToggle.posX - hStep;
-			selectAddToggle.posY = selectSquareToggle.posY - vStep;
-
-			if (Game.game.window.touchscreen)
-			{
-				copy.posX = pause.posX - vStep;
-				copy.posY = pause.posY + hStep;
-			}
-			else
-			{
-				copy.posX = playControl.posX - hStep;
-				copy.posY = playControl.posY + vStep;
-			}
-
-			cut.posX = copy.posX - hStep;
-			cut.posY = copy.posY + vStep;
-
-			selectClear.posX = cut.posX - hStep;
-			selectClear.posY = cut.posY + vStep;
-
-			if (selection)
-			{
-				selectClear.update();
-				copy.update();
-				cut.update();
-			}
-
-			if (selectMode && !changeCameraMode && !pasteMode)
-			{
-				selectSquareToggle.update();
-
-				if (selection)
-					selectAddToggle.update();
-			}
-			else if (!eraseMode && !changeCameraMode && !pasteMode)
-			{
-				if (currentPlaceable == Placeable.obstacle && mouseObstacle.enableStacking)
-					heightShortcut.update();
-
-				if (currentPlaceable == Placeable.obstacle && mouseObstacle.enableGroupID && !(mouseObstacle instanceof ObstacleBeatBlock))
-					groupShortcut.update();
-
-				if (currentPlaceable == Placeable.obstacle && mouseObstacle instanceof ObstacleBeatBlock)
-					beatPatternShortcut.update();
-
-				if (currentPlaceable == Placeable.playerTank || currentPlaceable == Placeable.enemyTank)
-					rotateShortcut.update();
-
-				if (currentPlaceable == Placeable.playerTank || currentPlaceable == Placeable.enemyTank)
-					teamShortcut.update();
-			}
-		}
-
-		if (Game.game.input.editorPause.isValid() && this.level.editable)
-		{
-			this.paused = true;
-			Game.game.input.editorPause.invalidate();
-			Game.screen = new OverlayEditorMenu(Game.screen, this);
-		}
-
-		if (Game.game.input.editorObjectMenu.isValid() && this.level.editable && (!paused || objectMenu))
-		{
-			Game.game.input.editorObjectMenu.invalidate();
-			this.paused = true;
-			this.objectMenu = true;
-			Game.screen = new OverlayObjectMenu(Game.screen, this);
-		}
-
-		if (Game.game.input.editorPaste.isValid() && !this.clipboard.isEmpty())
-		{
-			if (this.pasteMode)
-				this.paste();
-			else
-				paste.function.run();
-
-			Game.game.input.editorPaste.invalidate();
-		}
-
-		if (Game.game.input.editorCopy.isValid() && selection)
-		{
-			Game.game.input.editorCopy.invalidate();
-			copy.function.run();
-		}
-
-		if (Game.game.input.editorCut.isValid() && selection)
-		{
-			Game.game.input.editorCut.invalidate();
-			cut.function.run();
-		}
-
-		for (int i = 0; i < Game.effects.size(); i++)
-		{
-			Game.effects.get(i).update();
-		}
-
-		if (this.paused)
-			return;
-
-		if (Game.game.input.editorRevertCamera.isValid())
-		{
-			zoom = 1;
-			offsetX = 0;
-			offsetY = 0;
-
-			Game.game.input.editorRevertCamera.invalidate();
-		}
-
-		if (changeCameraMode)
-		{
-			if (Game.game.input.editorZoomOut.isPressed())
-				zoom *= Math.pow(0.99, Panel.frameFrequency);
-			else if (Game.game.window.validScrollDown)
-			{
-				Game.game.window.validScrollDown = false;
-				zoom *= 0.975;
-			}
-
-			if (Game.game.input.editorZoomIn.isPressed())
-				zoom *= Math.pow(1.01, Panel.frameFrequency);
-			else if (Game.game.window.validScrollUp)
-			{
-				Game.game.window.validScrollUp = false;
-				zoom *= 1.025;
-			}
-
-			if (Game.game.window.touchscreen)
-				recenter.update();
-		}
-		else if (!selectMode && !eraseMode && !pasteMode)
-		{
-			boolean up = false;
-			boolean down = false;
-
-			if (Game.game.input.editorNextType.isValid())
-			{
-				Game.game.input.editorNextType.invalidate();
-				down = true;
-			}
-			else if (Game.game.window.validScrollDown)
-			{
-				Game.game.window.validScrollDown = false;
-				down = true;
-			}
-
-			if (Game.game.input.editorPrevType.isValid())
-			{
-				Game.game.input.editorPrevType.invalidate();
-				up = true;
-			}
-			else if (Game.game.window.validScrollUp)
-			{
-				Game.game.window.validScrollUp = false;
-				up = true;
-			}
-
-			if (down && currentPlaceable == Placeable.enemyTank)
-			{
-				tankNum = (tankNum + 1) % (Game.registryTank.tankEntries.size() + this.level.customTanks.size());
-				this.refreshMouseTank();
-			}
-			else if (down && currentPlaceable == Placeable.obstacle)
-			{
-				obstacleNum = (obstacleNum + 1) % Game.registryObstacle.obstacleEntries.size();
-				mouseObstacle = Game.registryObstacle.getEntry(obstacleNum).getObstacle(0, 0);
-
-				if (mouseObstacle.enableGroupID)
-					mouseObstacle.setMetadata((mouseObstacle instanceof ObstacleBeatBlock ? mouseObstacleBeatPattern : mouseObstacleGroup) + "");
-			}
-
-			if (up && currentPlaceable == Placeable.enemyTank)
-			{
-				tankNum = ((tankNum - 1) + Game.registryTank.tankEntries.size() + this.level.customTanks.size()) % (Game.registryTank.tankEntries.size() + this.level.customTanks.size());
-				this.refreshMouseTank();
-			}
-			else if (up && currentPlaceable == Placeable.obstacle)
-			{
-				obstacleNum = ((obstacleNum - 1) + Game.registryObstacle.obstacleEntries.size()) % Game.registryObstacle.obstacleEntries.size();
-				mouseObstacle = Game.registryObstacle.getEntry(obstacleNum).getObstacle(0, 0);
-
-				if (mouseObstacle.enableGroupID)
-					mouseObstacle.setMetadata((mouseObstacle instanceof ObstacleBeatBlock ? mouseObstacleBeatPattern : mouseObstacleGroup) + "");
-			}
-
-			if ((up || down) && !(up && down))
-				this.movePlayer = !this.movePlayer;
-
-			boolean right = false;
-			boolean left = false;
-
-			if (Game.game.input.editorNextObj.isValid())
-			{
-				Game.game.input.editorNextObj.invalidate();
-				right = true;
-			}
-
-			if (Game.game.input.editorPrevObj.isValid())
-			{
-				Game.game.input.editorPrevObj.invalidate();
-				left = true;
-			}
-
-			if (right)
-			{
-				if (currentPlaceable == Placeable.enemyTank)
-				{
-					currentPlaceable = Placeable.obstacle;
-				}
-				else if (currentPlaceable == Placeable.obstacle)
-				{
-					currentPlaceable = Placeable.playerTank;
-					mouseTank = new TankPlayer(0, 0, 0);
-					((TankPlayer) mouseTank).setDefaultColor();
-				}
-				else if (currentPlaceable == Placeable.playerTank)
-				{
-					currentPlaceable = Placeable.enemyTank;
-					this.refreshMouseTank();
-				}
-			}
-
-			if (left)
-			{
-				if (currentPlaceable == Placeable.playerTank)
-				{
-					currentPlaceable = Placeable.obstacle;
-				}
-				else if (currentPlaceable == Placeable.obstacle)
-				{
-					currentPlaceable = Placeable.enemyTank;
-					this.refreshMouseTank();
-				}
-				else if (currentPlaceable == Placeable.enemyTank)
-				{
-					currentPlaceable = Placeable.playerTank;
-					mouseTank = new TankPlayer(0, 0, 0);
-					((TankPlayer) mouseTank).setDefaultColor();
-				}
-			}
-
-			if (Game.game.input.editorPrevMeta.isValid())
-			{
-				Game.game.input.editorPrevMeta.invalidate();
-
-				if (currentPlaceable == Placeable.enemyTank)
-					teamNum = (teamNum - 1 + this.teams.size() + 1) % (this.teams.size() + 1);
-				else if (currentPlaceable == Placeable.playerTank)
-					playerTeamNum = (playerTeamNum - 1 + this.teams.size() + 1) % (this.teams.size() + 1);
-				else if (currentPlaceable == Placeable.obstacle)
-				{
-					if (mouseObstacle instanceof ObstacleBeatBlock)
-					{
-						mouseObstacleBeatPattern = Math.max(mouseObstacleBeatPattern - 1, 0);
-						mouseObstacle.setMetadata(mouseObstacleBeatPattern + "");
-					}
-					else if (mouseObstacle.enableStacking)
-					{
-						mouseObstacleHeight = Math.max(mouseObstacleHeight - 0.5, 0.5);
-
-						if (stagger)
-							mouseObstacleHeight = Math.max(mouseObstacleHeight, 1);
-					}
-					else if (mouseObstacle.enableGroupID)
-					{
-						mouseObstacleGroup = Math.max(mouseObstacleGroup - 1, 0);
-						mouseObstacle.setMetadata(mouseObstacleGroup + "");
-					}
-				}
-			}
-
-			if (Game.game.input.editorNextMeta.isValid())
-			{
-				Game.game.input.editorNextMeta.invalidate();
-
-				if (currentPlaceable == Placeable.enemyTank)
-					teamNum = (teamNum + 1) % (this.teams.size() + 1);
-				else if (currentPlaceable == Placeable.playerTank)
-					playerTeamNum = (playerTeamNum + 1) % (this.teams.size() + 1);
-				else if (currentPlaceable == Placeable.obstacle)
-				{
-					if (mouseObstacle instanceof ObstacleBeatBlock)
-					{
-						mouseObstacleBeatPattern = Math.min(mouseObstacleBeatPattern + 1, 7);
-						mouseObstacle.setMetadata(mouseObstacleBeatPattern + "");
-					}
-					else if (mouseObstacle.enableStacking)
-						mouseObstacleHeight = Math.min(mouseObstacleHeight + 0.5, Obstacle.default_max_height);
-					else if (mouseObstacle.enableGroupID)
-					{
-						mouseObstacleGroup = Math.min(mouseObstacleGroup + 1, 999999999);
-						mouseObstacle.setMetadata(mouseObstacleGroup + "");
-					}
-				}
-			}
-		}
-
-		double prevZoom = zoom;
-		double prevOffsetX = offsetX;
-		double prevOffsetY = offsetY;
-
-		boolean prevPanDown = panDown;
-		boolean prevZoomDown = zoomDown;
-
-		panDown = false;
-		zoomDown = false;
-
-		validZoomFingers = 0;
-		if (!Game.game.window.touchscreen)
-		{
-			double mx = Drawing.drawing.getMouseX();
-			double my = Drawing.drawing.getMouseY();
-
-			boolean[] handled = checkMouse(mx, my,
-					Game.game.input.editorUse.isPressed(),
-					Game.game.input.editorAction.isPressed(),
-					Game.game.input.editorUse.isValid(),
-					Game.game.input.editorAction.isValid());
-
-			if (handled[0])
-				Game.game.input.editorUse.invalidate();
-
-			if (handled[1])
-				Game.game.input.editorAction.invalidate();
-		}
-		else
-		{
-			boolean input = false;
-
-			for (int i: Game.game.window.touchPoints.keySet())
-			{
-				InputPoint p = Game.game.window.touchPoints.get(i);
-
-				if (p.tag.equals("") || p.tag.equals("levelbuilder"))
-				{
-					input = true;
-
-					double mx = Drawing.drawing.toGameCoordsX(Drawing.drawing.getInterfacePointerX(p.x));
-					double my = Drawing.drawing.toGameCoordsY(Drawing.drawing.getInterfacePointerY(p.y));
-
-					boolean[] handled = checkMouse(mx, my, true, false, !p.tag.equals("levelbuilder"), false);
-
-					if (handled[0])
-						p.tag = "levelbuilder";
-				}
-			}
-
-			if (!input)
-				checkMouse(0, 0, false, false, false, false);
-
-			if (validZoomFingers == 0)
-				panDown = false;
-		}
-
-		double px = Drawing.drawing.toInterfaceCoordsX(panCurrentX);
-		double py = Drawing.drawing.toInterfaceCoordsY(panCurrentY);
-
-		if (!zoomDown && panDown)
-		{
-			if (prevPanDown && !prevZoomDown)
-			{
-				offsetX += panCurrentX - panX;
-				offsetY += panCurrentY - panY;
-			}
-
-			panX = Drawing.drawing.toGameCoordsX(px);
-			panY = Drawing.drawing.toGameCoordsY(py);
-		}
-
-
-		if (zoomDown)
-		{
-			double zx = Drawing.drawing.toInterfaceCoordsX(zoomCurrentX);
-			double zy = Drawing.drawing.toInterfaceCoordsY(zoomCurrentY);
-			double d = Math.sqrt(Math.pow(px - zx, 2) + Math.pow(py - zy, 2));
-
-			if (prevZoomDown)
-			{
-				zoom *= d / zoomDist;
-				zoom = Math.max(0.75, Math.min(Math.max(2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale), 1), zoom));
-				Drawing.drawing.scale = getScale();
-
-				panCurrentX = Drawing.drawing.toGameCoordsX(px);
-				panCurrentY = Drawing.drawing.toGameCoordsY(py);
-				zoomCurrentX = Drawing.drawing.toGameCoordsX(zx);
-				zoomCurrentY = Drawing.drawing.toGameCoordsY(zy);
-
-				double x = (panCurrentX + zoomCurrentX) / 2;
-				double y = (panCurrentY + zoomCurrentY) / 2;
-				offsetX += x - panX;
-				offsetY += y - panY;
-			}
-
-			panCurrentX = Drawing.drawing.toGameCoordsX(px);
-			panCurrentY = Drawing.drawing.toGameCoordsY(py);
-			zoomCurrentX = Drawing.drawing.toGameCoordsX(zx);
-			zoomCurrentY = Drawing.drawing.toGameCoordsY(zy);
-
-			double x = (panCurrentX + zoomCurrentX) / 2;
-			double y = (panCurrentY + zoomCurrentY) / 2;
-			panX = x;
-			panY = y;
-			zoomDist = d;
-		}
-
-		zoom = Math.max(0.75, Math.min(Math.max(2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale), 1), zoom));
-
-		offsetX = Math.min(Game.currentSizeX * Game.tile_size / 2, Math.max(-Game.currentSizeX * Game.tile_size / 2, offsetX));
-		offsetY = Math.min(Game.currentSizeY * Game.tile_size / 2, Math.max(-Game.currentSizeY * Game.tile_size / 2, offsetY));
-
-		if ((zoom == 0.75 || zoom == 2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale)) && prevZoom != zoom)
-			Drawing.drawing.playVibration("click");
-
-		if (Math.abs(offsetX) == Game.currentSizeX * Game.tile_size / 2 && prevOffsetX != offsetX)
-			Drawing.drawing.playVibration("click");
-
-		if (Math.abs(offsetY) == Game.currentSizeY * Game.tile_size / 2 && prevOffsetY != offsetY)
-			Drawing.drawing.playVibration("click");
-
-
-		if (Game.game.input.editorPlay.isValid() && this.spawns.size() > 0)
-		{
-			this.play();
-			Game.game.input.play.invalidate();
-		}
-
-		if (Game.game.input.editorDeselect.isValid())
-		{
-			this.clearSelection();
-		}
-
-		if (Game.game.input.editorToggleControls.isValid())
-		{
-			this.showControls = !this.showControls;
-			Game.game.input.editorToggleControls.invalidate();
-		}
-
-		if (Game.game.input.editorSelect.isValid())
-		{
-			if (this.changeCameraMode || this.pasteMode)
-				this.selectMode = true;
-			else
-				this.selectMode = !this.selectMode;
-
-			this.changeCameraMode = false;
-			this.pasteMode = false;
-
-			Game.game.input.editorSelect.invalidate();
-		}
-
-		if (Game.game.input.editorCamera.isValid())
-		{
-			this.changeCameraMode = !this.changeCameraMode;
-			Game.game.input.editorCamera.invalidate();
-		}
-
-		if (Game.game.input.editorPaste.isValid() && !pasteMode && !this.clipboard.isEmpty())
-		{
-			this.changeCameraMode = false;
-			this.eraseMode = false;
-			this.selectMode = false;
-			this.pasteMode = true;
-			Game.game.input.editorPaste.invalidate();
-		}
-
-		if (Game.game.input.editorBuild.isValid())
-		{
-			this.changeCameraMode = false;
-			this.eraseMode = false;
-			this.selectMode = false;
-			this.pasteMode = false;
-			Game.game.input.editorBuild.invalidate();
-		}
-
-		if (Game.game.input.editorErase.isValid())
-		{
-			this.changeCameraMode = false;
-			this.eraseMode = true;
-			this.selectMode = false;
-			this.pasteMode = false;
-			Game.game.input.editorErase.invalidate();
-		}
-
-		if (Game.game.input.editorHeight.isValid() && mouseObstacle.enableStacking && currentPlaceable == Placeable.obstacle)
-		{
-			Game.game.input.editorHeight.invalidate();
-			this.heightShortcut.function.run();
-			((ScreenLevelEditorOverlay) Game.screen).triggerKeybind = Game.game.input.editorHeight;
-		}
-
-		if (Game.game.input.editorGroupID.isValid() && mouseObstacle.enableGroupID && currentPlaceable == Placeable.obstacle)
-		{
-			Game.game.input.editorGroupID.invalidate();
-
-			if (mouseObstacle instanceof ObstacleBeatBlock)
-				this.beatPatternShortcut.function.run();
-			else
-				this.groupShortcut.function.run();
-
-			((ScreenLevelEditorOverlay) Game.screen).triggerKeybind = Game.game.input.editorGroupID;
-		}
-
-		if (Game.game.input.editorTeam.isValid() && (currentPlaceable == Placeable.enemyTank || currentPlaceable == Placeable.playerTank))
-		{
-			Game.game.input.editorTeam.invalidate();
-			this.teamShortcut.function.run();
-			((ScreenLevelEditorOverlay) Game.screen).triggerKeybind = Game.game.input.editorTeam;
-		}
-
-		if (Game.game.input.editorRotate.isValid() && (currentPlaceable == Placeable.enemyTank || currentPlaceable == Placeable.playerTank))
-		{
-			Game.game.input.editorRotate.invalidate();
-			this.rotateShortcut.function.run();
-			((ScreenLevelEditorOverlay) Game.screen).triggerKeybind = Game.game.input.editorRotate;
-		}
-
-		if (redoActions.size() > 0 && redoLength != actions.size())
-		{
-			redoActions.clear();
-			redoLength = -1;
-		}
-
-		if (Game.game.input.editorUndo.isValid() && actions.size() > 0)
-		{
-			Action a = actions.remove(actions.size() - 1);
-			a.undo();
-			redoActions.add(a);
-			redoLength = actions.size();
-			Game.game.input.editorUndo.invalidate();
-		}
-
-		if (Game.game.input.editorRedo.isValid() && redoActions.size() > 0)
-		{
-			Action a = redoActions.remove(redoActions.size() - 1);
-			a.redo();
-			actions.add(a);
-			redoLength = actions.size();
-			Game.game.input.editorRedo.invalidate();
-		}
-
-		if (mouseTank != null)
-		{
-			mouseTank.angle = Math.PI * this.mouseTankOrientation * 0.5;
-		}
-
-		Game.effects.removeAll(Game.removeEffects);
-		Game.removeEffects.clear();
-
-		Game.movables.removeAll(Game.removeMovables);
-		Game.removeMovables.clear();
-
-		for (Obstacle o: Game.removeObstacles)
-		{
-			o.removed = true;
-			Drawing.drawing.terrainRenderer.remove(o);
-
-			int x = (int) (o.posX / Game.tile_size);
-			int y = (int) (o.posY / Game.tile_size);
-
-			if (x >= 0 && x < Game.currentSizeX && y >= 0 && y < Game.currentSizeY && Game.enable3d)
-			{
-				Game.redrawGroundTiles.add(new int[]{x, y});
-
-				if (o.bulletCollision)
-				{
-					Game.game.solidGrid[x][y] = false;
-					Game.game.unbreakableGrid[x][y] = false;
-				}
-			}
-
-			Game.obstacles.remove(o);
-		}
-
-		Game.removeObstacles.clear();
-	}
-
-	public boolean[] checkMouse(double mx, double my, boolean left, boolean right, boolean validLeft, boolean validRight)
-	{
-		boolean[] handled = new boolean[]{false, false};
-
-		double posX = Math.round((mx) / Game.tile_size + 0.5) * Game.tile_size - Game.tile_size / 2;
-		double posY = Math.round((my) / Game.tile_size + 0.5) * Game.tile_size - Game.tile_size / 2;
-		mouseTank.posX = posX;
-		mouseTank.posY = posY;
-		mouseObstacle.posX = posX;
-		mouseObstacle.posY = posY;
-
-		if (changeCameraMode)
-		{
-			if (validLeft)
-			{
-				if (validZoomFingers == 0)
-				{
-					panDown = true;
-					panCurrentX = mx;
-					panCurrentY = my;
-				}
-				else if (validZoomFingers == 1)
-				{
-					zoomDown = true;
-					zoomCurrentX = mx;
-					zoomCurrentY = my;
-				}
-
-				validZoomFingers++;
-			}
-		}
-		else if (selectMode && !pasteMode)
-		{
-			if (!selection)
-				selectAdd = true;
-
-			boolean pressed = left || right;
-			boolean valid = validLeft || validRight;
-
-			if (valid)
-			{
-				selectX1 = clampTileX(mouseObstacle.posX);
-				selectY1 = clampTileY(mouseObstacle.posY);
-				selectHeld = true;
-				handled[0] = true;
-				handled[1] = true;
-
-				Drawing.drawing.playVibration("selectionChanged");
-			}
-
-			if (pressed && selectHeld)
-			{
-				double prevSelectX2 = selectX2;
-				double prevSelectY2 = selectY2;
-
-				selectX2 = clampTileX(mouseObstacle.posX);
-				selectY2 = clampTileY(mouseObstacle.posY);
-
-				if (selectSquare || Game.game.input.editorHoldSquare.isPressed())
-				{
-					double size = Math.min(Math.abs(selectX2 - selectX1), Math.abs(selectY2 - selectY1));
-					selectX2 = Math.signum(selectX2 - selectX1) * size + selectX1;
-					selectY2 = Math.signum(selectY2 - selectY1) * size + selectY1;
-				}
-
-				if (prevSelectX2 != selectX2 || prevSelectY2 != selectY2)
-					Drawing.drawing.playVibration("selectionChanged");
-			}
-
-			if (!pressed && selectHeld)
-			{
-				Drawing.drawing.playVibration("click");
-				selectHeld = false;
-
-				double lowX = Math.min(selectX1, selectX2);
-				double highX = Math.max(selectX1, selectX2);
-				double lowY = Math.min(selectY1, selectY2);
-				double highY = Math.max(selectY1, selectY2);
-
-				ArrayList<Integer> px = new ArrayList<>();
-				ArrayList<Integer> py = new ArrayList<>();
-
-				for (double x = lowX; x <= highX; x += Game.tile_size)
-				{
-					for (double y = lowY; y <= highY; y += Game.tile_size)
-					{
-						if (selectedTiles[(int)(x / Game.tile_size)][(int)(y / Game.tile_size)] == selectInverted)
-						{
-							px.add((int)(x / Game.tile_size));
-							py.add((int)(y / Game.tile_size));
-						}
-
-						selectedTiles[(int)(x / Game.tile_size)][(int)(y / Game.tile_size)] = !selectInverted;
-					}
-				}
-
-				this.actions.add(new Action.ActionSelectTiles(this, !selectInverted, px, py));
-
-				this.refreshSelection();
-			}
-			else
-			{
-				if (selection && Game.game.input.editorSelectAddToggle.isValid())
-				{
-					Game.game.input.editorSelectAddToggle.invalidate();
-					selectAddToggle.function.run();
-				}
-
-				selectInverted = selection && ((!selectAdd && !right) || (selectAdd && right));
-			}
-
-			if (Game.game.input.editorLockSquare.isValid())
-			{
-				Game.game.input.editorLockSquare.invalidate();
-				selectSquareToggle.function.run();
-			}
-		}
-		else if (symmetrySelectMode && !pasteMode)
-		{
-			if (validLeft)
-			{
-				selectX1 = clampTileX(mouseObstacle.posX);
-				selectY1 = clampTileY(mouseObstacle.posY);
-				selectHeld = true;
-				handled[0] = true;
-				handled[1] = true;
-
-				Drawing.drawing.playVibration("selectionChanged");
-			}
-
-			if (left && selectHeld)
-			{
-				double prevSelectX2 = selectX2;
-				double prevSelectY2 = selectY2;
-
-				selectX2 = clampTileX(mouseObstacle.posX);
-				selectY2 = clampTileY(mouseObstacle.posY);
-
-				if (symmetryType == SymmetryType.flip8 || symmetryType == SymmetryType.rot90)
-				{
-					double size = Math.min(Math.abs(selectX2 - selectX1), Math.abs(selectY2 - selectY1));
-					selectX2 = Math.signum(selectX2 - selectX1) * size + selectX1;
-					selectY2 = Math.signum(selectY2 - selectY1) * size + selectY1;
-				}
-
-				if (prevSelectX2 != selectX2 || prevSelectY2 != selectY2)
-					Drawing.drawing.playVibration("selectionChanged");
-			}
-
-			if (!left && selectHeld)
-			{
-				Drawing.drawing.playVibration("click");
-				selectHeld = false;
-
-				double lowX = Math.min(selectX1, selectX2);
-				double highX = Math.max(selectX1, selectX2);
-				double lowY = Math.min(selectY1, selectY2);
-				double highY = Math.max(selectY1, selectY2);
-
-				this.symmetryX1 = lowX;
-				this.symmetryX2 = highX;
-				this.symmetryY1 = lowY;
-				this.symmetryY2 = highY;
-			}
-		}
-		else
-		{
-			if (currentPlaceable == Placeable.enemyTank)
-			{
-				if (this.teamNum == this.teams.size())
-					mouseTank.team = null;
-				else
-					mouseTank.team = this.teams.get(teamNum);
-			}
-			else if (currentPlaceable == Placeable.playerTank)
-			{
-				if (this.playerTeamNum == this.teams.size())
-					mouseTank.team = null;
-				else
-					mouseTank.team = this.teams.get(playerTeamNum);
-			}
-
-			int x = (int) (mouseObstacle.posX / Game.tile_size);
-			int y = (int) (mouseObstacle.posY / Game.tile_size);
-
-			if (x >= 0 && x < Game.currentSizeX && y >= 0 && y < Game.currentSizeY)
-			{
-				if (selectedTiles[x][y] && (validLeft || validRight) && !(this.currentPlaceable == Placeable.playerTank && this.movePlayer))
-				{
-					double ox = mouseObstacle.posX;
-					double oy = mouseObstacle.posY;
-
-					ArrayList<Action> actions = this.actions;
-					this.actions = new ArrayList<>();
-
-					for (int i = 0; i < selectedTiles.length; i++)
-					{
-						for (int j = 0; j < selectedTiles[i].length; j++)
-						{
-							if (selectedTiles[i][j])
-							{
-								mouseObstacle.posX = (i + 0.5) * Game.tile_size;
-								mouseObstacle.posY = (j + 0.5) * Game.tile_size;
-
-								mouseTank.posX = mouseObstacle.posX;
-								mouseTank.posY = mouseObstacle.posY;
-
-								handled = handlePlace(handled, left, right, validLeft, validRight, true);
-							}
-						}
-					}
-
-					if (this.actions.size() > 0)
-					{
-						Action a = new Action.ActionGroup(this, this.actions);
-						actions.add(a);
-						Drawing.drawing.playVibration("click");
-					}
-
-					this.actions = actions;
-
-
-					mouseObstacle.posX = ox;
-					mouseObstacle.posY = oy;
-
-					mouseTank.posX = ox;
-					mouseTank.posY = oy;
-				}
-				else
-					handled = handlePlace(handled, left, right, validLeft, validRight, false);
-			}
-		}
-
-		return handled;
-	}
-
-	public boolean[] handlePlace(boolean[] handled, boolean left, boolean right, boolean validLeft, boolean validRight, boolean batch)
-	{
-		return handlePlace(handled, left, right, validLeft, validRight, batch, false);
-	}
-
-	public boolean[] handlePlace(boolean[] handled, boolean left, boolean right, boolean validLeft, boolean validRight, boolean batch, boolean paste)
-	{
-		ArrayList<Double> posX = new ArrayList<>();
-		ArrayList<Double> posY = new ArrayList<>();
-		ArrayList<Double> orientations = new ArrayList<>();
-
-		double originalX = mouseTank.posX;
-		double originalY = mouseTank.posY;
-		double originalOrientation = mouseTank.orientation;
-
-		posX.add(mouseTank.posX);
-		posY.add(mouseTank.posY);
-		orientations.add(mouseTank.orientation);
-
-		if (mouseTank.posX >= symmetryX1 && mouseTank.posX <= symmetryX2 && mouseTank.posY >= symmetryY1 && mouseTank.posY <= symmetryY2)
-		{
-			if (symmetryType == SymmetryType.flipHorizontal || symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flip8)
-			{
-				for (int i = 0; i < posX.size(); i++)
-				{
-					posY.add(symmetryY1 + (symmetryY2 - posY.get(i)));
-					posX.add(posX.get(i));
-
-					if (orientations.get(i) == 1 || orientations.get(i) == 3)
-						orientations.add((orientations.get(i) + 2) % 4);
-					else
-						orientations.add(orientations.get(i));
-				}
-			}
-
-			if (symmetryType == SymmetryType.flipVertical || symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flip8)
-			{
-				for (int i = 0; i < posX.size(); i++)
-				{
-					posX.add(symmetryX1 + (symmetryX2 - posX.get(i)));
-					posY.add(posY.get(i));
-
-					if (orientations.get(i) == 0 || orientations.get(i) == 2)
-						orientations.add((orientations.get(i) + 2) % 4);
-					else
-						orientations.add(orientations.get(i));
-				}
-			}
-		}
-
-		for (int oi = 0; oi < orientations.size(); oi++)
-		{
-			mouseTank.posX = posX.get(oi);
-			mouseTank.posY = posY.get(oi);
-			mouseObstacle.posX = mouseTank.posX;
-			mouseObstacle.posY = mouseTank.posY;
-			mouseTank.orientation = orientations.get(oi);
-
-			if (mouseTank.posX > 0 && mouseTank.posY > 0 && mouseTank.posX < Game.tile_size * Game.currentSizeX && mouseTank.posY < Game.tile_size * Game.currentSizeY)
-			{
-				if (validLeft && pasteMode && !paste)
-				{
-					paste();
-
-					mouseTank.posX = originalX;
-					mouseTank.posY = originalY;
-					mouseTank.orientation = originalOrientation;
-
-					mouseObstacle.posX = originalX;
-					mouseObstacle.posY = originalY;
-
-					return new boolean[]{true, true};
-				}
-
-				if (!pasteMode && (right || (eraseMode && left)))
-				{
-					boolean skip = false;
-
-					if (validRight || (eraseMode && validLeft))
-					{
-						for (int i = 0; i < Game.movables.size(); i++)
-						{
-							Movable m = Game.movables.get(i);
-							if (m.posX == mouseTank.posX && m.posY == mouseTank.posY && m instanceof Tank && !(this.spawns.contains(m) && this.spawns.size() <= 1))
-							{
-								skip = true;
-
-								if (m instanceof TankSpawnMarker)
-								{
-									this.spawns.remove(m);
-									this.actions.add(new Action.ActionPlayerSpawn(this, (TankSpawnMarker) m, false));
-								}
-								else
-									this.actions.add(new Action.ActionTank((Tank) m, false));
-
-								Game.removeMovables.add(m);
-
-								if (!batch)
-								{
-									Drawing.drawing.playVibration("click");
-
-									for (int z = 0; z < 100 * Game.effectMultiplier; z++)
-									{
-										Effect e = Effect.createNewEffect(m.posX, m.posY, ((Tank) m).size / 2, Effect.EffectType.piece);
-										double var = 50;
-										e.colR = Math.min(255, Math.max(0, ((Tank) m).colorR + Math.random() * var - var / 2));
-										e.colG = Math.min(255, Math.max(0, ((Tank) m).colorG + Math.random() * var - var / 2));
-										e.colB = Math.min(255, Math.max(0, ((Tank) m).colorB + Math.random() * var - var / 2));
-
-										if (Game.enable3d)
-											e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * 2);
-										else
-											e.setPolarMotion(Math.random() * 2 * Math.PI, Math.random() * 2);
-
-										e.maxAge /= 2;
-										Game.effects.add(e);
-									}
-								}
-
-								break;
-							}
-						}
-					}
-
-					for (int i = 0; i < Game.obstacles.size(); i++)
-					{
-						Obstacle m = Game.obstacles.get(i);
-						if (m.posX == mouseTank.posX && m.posY == mouseTank.posY)
-						{
-							skip = true;
-							this.actions.add(new Action.ActionObstacle(m, false));
-							Game.removeObstacles.add(m);
-
-							if (!batch)
-								Drawing.drawing.playVibration("click");
-
-							break;
-						}
-					}
-
-					if (!batch && !Game.game.window.touchscreen && !skip && (currentPlaceable == Placeable.enemyTank || currentPlaceable == Placeable.playerTank) && validRight)
-					{
-						this.mouseTankOrientation += 1;
-						this.mouseTankOrientation = this.mouseTankOrientation % 4;
-					}
-
-					if (Game.game.window.touchscreen)
-						handled[0] = true;
-
-					handled[1] = true;
-				}
-
-				if (!eraseMode && clickCooldown <= 0 && (validLeft || (!pasteMode && left && currentPlaceable == Placeable.obstacle && this.mouseObstacle.draggable)))
-				{
-					boolean skip = false;
-
-					double mx = mouseTank.posX;
-					double my = mouseTank.posY;
-
-					if (currentPlaceable == Placeable.obstacle)
-					{
-						mx = mouseObstacle.posX;
-						my = mouseObstacle.posY;
-					}
-
-					if (mouseObstacle.tankCollision || currentPlaceable != Placeable.obstacle)
-					{
-						for (int i = 0; i < Game.movables.size(); i++)
-						{
-							Movable m = Game.movables.get(i);
-							if (m.posX == mx && m.posY == my)
-							{
-								skip = true;
-								break;
-							}
-						}
-					}
-
-					for (int i = 0; i < Game.obstacles.size(); i++)
-					{
-						Obstacle m = Game.obstacles.get(i);
-						if (m.posX == mx && m.posY == my)
-						{
-							if (!validRight)
-							{
-								if (m.tankCollision || mouseObstacle.tankCollision || m.getClass() == mouseObstacle.getClass() || (mouseObstacle.isSurfaceTile && m.isSurfaceTile))
-								{
-									skip = true;
-									break;
-								}
-							}
-							else
-							{
-								this.actions.add(new Action.ActionObstacle(m, false));
-								Game.removeObstacles.add(m);
-							}
-						}
-					}
-
-					if (!skip)
-					{
-						if (currentPlaceable == Placeable.enemyTank)
-						{
-							Tank t;
-
-							if (paste)
-								t = mouseTank;
-							else
-							{
-								if (tankNum < Game.registryTank.tankEntries.size())
-									t = Game.registryTank.getEntry(tankNum).getTank(mouseTank.posX, mouseTank.posY, mouseTank.angle);
-								else
-									t = ((TankAIControlled) mouseTank).instantiate(mouseTank.name, mouseTank.posX, mouseTank.posY, mouseTank.angle);
-							}
-
-							t.team = mouseTank.team;
-							this.actions.add(new Action.ActionTank(t, true));
-							Game.movables.add(t);
-
-							if (!batch)
-								Drawing.drawing.playVibration("click");
-						}
-						else if (currentPlaceable == Placeable.playerTank)
-						{
-							ArrayList<TankSpawnMarker> spawnsClone = (ArrayList<TankSpawnMarker>) spawns.clone();
-							if (this.movePlayer && !paste)
-							{
-								for (int i = 0; i < Game.movables.size(); i++)
-								{
-									Movable m = Game.movables.get(i);
-
-									if (m instanceof TankSpawnMarker)
-										Game.removeMovables.add(m);
-								}
-
-								this.spawns.clear();
-							}
-
-							TankSpawnMarker t = new TankSpawnMarker("player", mouseTank.posX, mouseTank.posY, mouseTank.angle);
-							t.team = mouseTank.team;
-							this.spawns.add(t);
-
-							if (this.movePlayer && !paste)
-								this.actions.add(new Action.ActionMovePlayer(this, spawnsClone, t));
-							else
-								this.actions.add(new Action.ActionPlayerSpawn(this, t, true));
-
-							Game.movables.add(t);
-
-							if (!batch)
-								Drawing.drawing.playVibration("click");
-
-							if (this.movePlayer)
-								t.drawAge = 50;
-						}
-						else if (currentPlaceable == Placeable.obstacle)
-						{
-							Obstacle o;
-
-							if (paste)
-								o = mouseObstacle;
-							else
-								o = Game.registryObstacle.getEntry(obstacleNum).getObstacle(0, 0);
-
-							o.colorR = mouseObstacle.colorR;
-							o.colorG = mouseObstacle.colorG;
-							o.colorB = mouseObstacle.colorB;
-							o.posX = mouseObstacle.posX;
-							o.posY = mouseObstacle.posY;
-
-							if (o.enableStacking)
-							{
-								o.stackHeight = mouseObstacleHeight;
-								o.startHeight = mouseObstacleStartHeight;
-
-								if (this.stagger && !paste)
-								{
-									if ((((int) (o.posX / Game.tile_size) + (int) (o.posY / Game.tile_size)) % 2 == 1 && !this.oddStagger)
-											|| (((int) (o.posX / Game.tile_size) + (int) (o.posY / Game.tile_size)) % 2 == 0 && this.oddStagger))
-										o.stackHeight -= 0.5;
-								}
-							}
-
-							if (o.enableGroupID)
-							{
-								String suffix = o.enableStacking ?  "#" + o.stackHeight : "";
-								o.setMetadata((o instanceof ObstacleBeatBlock ? mouseObstacleBeatPattern : mouseObstacleGroup) + suffix);
-							}
-
-							mouseObstacle = Game.registryObstacle.getEntry(obstacleNum).getObstacle(o.posX, o.posY);
-
-							if (mouseObstacle.enableGroupID)
-								mouseObstacle.setMetadata((o instanceof ObstacleBeatBlock ? mouseObstacleBeatPattern : mouseObstacleGroup) + "");
-
-							this.actions.add(new Action.ActionObstacle(o, true));
-							Game.addObstacle(o);
-
-							if (!batch)
-								Drawing.drawing.playVibration("click");
-						}
-					}
-
-					handled[0] = true;
-					handled[1] = true;
-				}
-			}
-		}
-
-		return handled;
-	}
-
-	public void paste()
-	{
-		Drawing.drawing.playVibration("click");
-
-		ArrayList<Action> actions = this.actions;
-		this.actions = new ArrayList<>();
-
-		boolean[] handled = new boolean[2];
-
-		Tank prevMouseTank = mouseTank;
-		Obstacle prevMouseObstacle = mouseObstacle;
-		Placeable placeable = currentPlaceable;
-
-		double mx = prevMouseObstacle.posX;
-		double my = prevMouseObstacle.posY;
-
-		for (Object o : this.clipboard)
-		{
-			if (o instanceof Obstacle)
-			{
-				currentPlaceable = Placeable.obstacle;
-
-				try
-				{
-					Obstacle n = (Obstacle) o.getClass().getConstructor(String.class, double.class, double.class).newInstance(((Obstacle) o).name, (((Obstacle) o).posX + prevMouseObstacle.posX) / 50 - 0.5, (((Obstacle) o).posY + prevMouseObstacle.posY) / 50 - 0.5);
-					n.groupID = ((Obstacle) o).groupID;
-					n.stackHeight = ((Obstacle) o).stackHeight;
-					n.startHeight = ((Obstacle) o).startHeight;
-					mouseObstacle = n;
-					mouseObstacleHeight = n.stackHeight;
-					mouseObstacleStartHeight = n.startHeight;
-					mouseObstacleGroup = n.groupID;
-
-					if (n instanceof ObstacleBeatBlock)
-						mouseObstacleBeatPattern = n.groupID;
-
-					mouseTank.posX = mouseObstacle.posX;
-					mouseTank.posY = mouseObstacle.posY;
-
-					handlePlace(handled, true, false, true, false, true, true);
-				}
-				catch (Exception e)
-				{
-					Game.exitToCrash(e.getCause());
-				}
-			}
-
-			else if (o instanceof Tank)
-			{
-				currentPlaceable = Placeable.enemyTank;
-
-				try
-				{
-					Tank n;
-
-					if (o.getClass().equals(TankAIControlled.class))
-					{
-						n = new TankAIControlled(((TankAIControlled) o).name, ((Tank) o).posX + prevMouseObstacle.posX, ((Tank) o).posY + prevMouseObstacle.posY, ((TankAIControlled) o).size, ((TankAIControlled) o).colorR, ((TankAIControlled) o).colorG, ((TankAIControlled) o).colorB, ((TankAIControlled) o).angle, ((TankAIControlled) o).shootAIType);
-						((TankAIControlled) o).cloneProperties((TankAIControlled) n);
-					}
-					else
-					{
-						n = (Tank) o.getClass().getConstructor(String.class, double.class, double.class, double.class).newInstance(((Tank) o).name, ((Tank) o).posX + prevMouseObstacle.posX, ((Tank) o).posY + prevMouseObstacle.posY, ((Tank) o).angle);
-						n.musicTracks = Game.registryTank.tankMusics.get(n.name);
-					}
-
-					n.team = ((Tank) o).team;
-					n.destroy = ((Tank) o).destroy;
-					mouseTank = n;
-
-					if (n instanceof TankSpawnMarker || n instanceof TankPlayer)
-						currentPlaceable = Placeable.playerTank;
-
-					handlePlace(handled, true, false, true, false, true, true);
-					//Game.movables.add(n);
-				}
-				catch (Exception e)
-				{
-					Game.exitToCrash(e);
-				}
-			}
-
-			prevMouseObstacle.posX = mx;
-			prevMouseObstacle.posY = my;
-			prevMouseTank.posX = mx;
-			prevMouseTank.posY = my;
-		}
-
-		currentPlaceable = placeable;
-		mouseTank = prevMouseTank;
-		mouseObstacle = prevMouseObstacle;
-
-		mouseObstacleHeight = mouseObstacle.stackHeight;
-		mouseObstacleStartHeight = mouseObstacle.startHeight;
-
-		ArrayList<Action> tempActions = this.actions;
-		this.actions = actions;
-
-		this.actions.add(new Action.ActionPaste(this, tempActions));
-	}
-
-	public void save()
-	{
-		this.save(this.name);
-	}
-
-	public void save(String levelName)
-	{
-		StringBuilder level = new StringBuilder("{");
-
-		if (!this.level.editable)
-			level.append("*");
-
-		level.append(this.level.sizeX).append(",").append(this.level.sizeY).append(",").append(this.level.colorR).append(",").append(this.level.colorG).append(",").append(this.level.colorB).append(",").append(this.level.colorVarR).append(",").append(this.level.colorVarG).append(",").append(this.level.colorVarB)
-				.append(",").append((int) (this.level.timer / 100)).append(",").append((int) Math.round(this.level.light * 100)).append(",").append((int) Math.round(this.level.shadow * 100)).append("|");
-
-		ArrayList<Obstacle> unmarked = (ArrayList<Obstacle>) Game.obstacles.clone();
-		String[][][] obstacles = new String[Game.registryObstacle.obstacleEntries.size()][this.level.sizeX][this.level.sizeY];
-
-		for (int h = 0; h < Game.registryObstacle.obstacleEntries.size(); h++)
-		{
-			Obstacle obs = Game.registryObstacle.obstacleEntries.get(h).getObstacle(0, 0);
-
-			for (int i = 0; i < Game.obstacles.size(); i++)
-			{
-				Obstacle o = Game.obstacles.get(i);
-				int x = (int) (o.posX / Game.tile_size);
-				int y = (int) (o.posY / Game.tile_size);
-
-				if (x < obstacles[h].length && x >= 0 && y < obstacles[h][0].length && y >= 0 && o.name.equals(Game.registryObstacle.getEntry(h).name))
-				{
-					obstacles[h][x][y] = o.stackHeight + "";
-
-					if (o.enableGroupID)
-					{
-						if (o.enableStacking)
-							obstacles[h][x][y] = o.groupID + "#" + o.stackHeight;
-						else
-							obstacles[h][x][y] = o.groupID + "";
-					}
-
-					unmarked.remove(o);
-				}
-
-				//level += x + "-" + y + ",";
-			}
-
-			//compression
-			for (int i = 0; i < this.level.sizeX; i++)
-			{
-				for (int j = 0; j < this.level.sizeY; j++)
-				{
-					if (obstacles[h][i][j] != null)
-					{
-						String stack = obstacles[h][i][j];
-
-						int xLength = 0;
-
-						while (true)
-						{
-							xLength += 1;
-
-							if (i + xLength >= obstacles[h].length)
-								break;
-							else if (!Objects.equals(obstacles[h][i + xLength][j], stack))
-								break;
-						}
-
-
-						int yLength = 0;
-
-						while (true)
-						{
-							yLength += 1;
-
-							if (j + yLength >= obstacles[h][0].length)
-								break;
-							else if (!Objects.equals(obstacles[h][i][j + yLength], stack))
-								break;
-						}
-
-						String name = "";
-						String obsName = Game.registryObstacle.obstacleEntries.get(h).name;
-
-						if (!obsName.equals("normal") || stack != null)
-							name = "-" + obsName;
-
-						if (xLength >= yLength)
-						{
-							if (xLength == 1)
-								level.append(i).append("-").append(j).append(name);
-							else
-								level.append(i).append("...").append(i + xLength - 1).append("-").append(j).append(name);
-
-							if ((obs.enableStacking && stack != null) || (obs.enableGroupID && !("0".equals(stack))))
-								level.append("-").append(stack);
-
-							level.append(",");
-
-							for (int z = 0; z < xLength; z++)
-							{
-								obstacles[h][i + z][j] = null;
-							}
-						}
-						else
-						{
-							level.append(i).append("-").append(j).append("...").append(j + yLength - 1).append(name);
-
-							if ((obs.enableStacking && !("1.0".equals(stack))) || (obs.enableGroupID && !("0".equals(stack))))
-								level.append("-").append(stack);
-
-							level.append(",");
-
-							for (int z = 0; z < yLength; z++)
-							{
-								obstacles[h][i][j + z] = null;
-							}
-						}
-					}
-				}
-			}
-		}
-
-		for (int i = 0; i < unmarked.size(); i++)
-		{
-			level.append((int)(unmarked.get(i).posX / Game.tile_size)).append("-").append((int)(unmarked.get(i).posY / Game.tile_size));
-			level.append("-").append(unmarked.get(i).name);
-
-			Obstacle u = unmarked.get(i);
-			if (u instanceof ObstacleUnknown && ((ObstacleUnknown) u).metadata != null)
-				level.append("-").append(((ObstacleUnknown) u).metadata);
-			else
-			{
-				if (u.enableGroupID)
-					level.append("-").append(u.groupID);
-
-				if (u.enableStacking)
-					level.append("-").append(u.stackHeight);
-			}
-
-
-			level.append(",");
-		}
-
-		if (level.charAt(level.length() - 1) == ',')
-		{
-			level = new StringBuilder(level.substring(0, level.length() - 1));
-		}
-
-		level.append("|");
-
-		for (int i = 0; i < Game.movables.size(); i++)
-		{
-			if (Game.movables.get(i) instanceof Tank)
-			{
-				Tank t = (Tank) Game.movables.get(i);
-				int x = (int) (t.posX / Game.tile_size);
-				int y = (int) (t.posY / Game.tile_size);
-				int angle = (int) (t.angle * 2 / Math.PI);
-
-				level.append(x).append("-").append(y).append("-").append(t.name).append("-").append(angle);
-
-				if (t.team != null)
-					level.append("-").append(t.team.name);
-
-				level.append(",");
-			}
-		}
-
-		if (Game.movables.size() == 0)
-		{
-			level.append("|");
-		}
-
-		level = new StringBuilder(level.substring(0, level.length() - 1));
-
-		level.append("|");
-
-		for (int i = 0; i < teams.size(); i++)
-		{
-			Team t = teams.get(i);
-			level.append(t.name).append("-").append(t.friendlyFire);
-			if (t.enableColor)
-				level.append("-").append(t.teamColorR).append("-").append(t.teamColorG).append("-").append(t.teamColorB);
-
-			level.append(",");
-		}
-
-		level = new StringBuilder(level.substring(0, level.length() - 1));
-
-		level.append("}");
-
-		if (this.level.startingCoins > 0)
-			level.append("\ncoins\n").append(this.level.startingCoins);
-
-		if (!this.level.shop.isEmpty())
-		{
-			level.append("\nshop");
-
-			for (Item.ShopItem i : this.level.shop)
-				level.append("\n").append(i.toString());
-		}
-
-		if (!this.level.startingItems.isEmpty())
-		{
-			level.append("\nitems");
-
-			for (Item.ItemStack<?> i : this.level.startingItems)
-				level.append("\n").append(i.toString());
-		}
-
-		if (!this.level.customTanks.isEmpty())
-		{
-			level.append("\ntanks");
-
-			for (Tank t : this.level.customTanks)
-				level.append("\n").append(t.toString());
-		}
-
-		Game.currentLevelString = level.toString();
-
-		BaseFile file = Game.game.fileManager.getFile(Game.homedir + Game.levelDir + "/" + levelName);
-		if (file.exists())
-		{
-			if (!this.level.editable)
-			{
-				return;
-			}
-
-			file.delete();
-		}
-
-		try
-		{
-			file.create();
-
-			file.startWriting();
-			file.println(level.toString());
-			file.stopWriting();
-		}
-		catch (IOException e)
-		{
-			Game.exitToCrash(e);
-		}
-
-	}
-
-	@Override
-	public void draw()
-	{
-		if (Level.isDark())
-			this.fontBrightness = 255;
-		else
-			this.fontBrightness = 0;
-
-		if (Panel.panel.continuation == null)
-		{
-			for (Obstacle o : Game.obstacles)
-			{
-				o.baseGroundHeight = Game.sampleGroundHeight(o.posX, o.posY);
-			}
-
-			if (Game.enable3d)
-				Game.recomputeHeightGrid();
-
-			Drawing.drawing.setColor(174, 92, 16);
-
-			double mul = 1;
-			if (Game.angledView)
-				mul = 2;
-
-			Drawing.drawing.fillShadedInterfaceRect(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2,
-					mul * Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale, mul * Game.game.window.absoluteHeight / Drawing.drawing.interfaceScale);
-		}
-
-		this.drawDefaultBackground();
-
-		for (Movable m: Game.movables)
-			drawables[m.drawLevel].add(m);
-
-		if (Game.enable3d)
-		{
-			for (int i = 0; i < drawables.length; i++)
-			{
-				for (Obstacle o : Game.obstacles)
-				{
-					if (o.drawLevel == i && !o.batchDraw)
-					{
-						drawables[i].add(o);
-					}
-				}
-			}
-		}
-		else
-		{
-			for (Obstacle o : Game.obstacles)
-				drawables[o.drawLevel].add(o);
-		}
-
-		for (Effect e: Game.effects)
-			drawables[7].add(e);
-
-		for (int i = 0; i < this.drawables.length; i++)
-		{
-			if (i == 5 && Game.enable3d)
-			{
-				Drawing drawing = Drawing.drawing;
-				Drawing.drawing.setColor(174, 92, 16);
-				Drawing.drawing.fillForcedBox(drawing.sizeX / 2, -Game.tile_size / 2, 0, drawing.sizeX + Game.tile_size * 2, Game.tile_size, Obstacle.draw_size, (byte) 0);
-				Drawing.drawing.fillForcedBox(drawing.sizeX / 2, Drawing.drawing.sizeY + Game.tile_size / 2, 0, drawing.sizeX + Game.tile_size * 2, Game.tile_size, Obstacle.draw_size, (byte) 0);
-				Drawing.drawing.fillForcedBox(-Game.tile_size / 2, drawing.sizeY / 2, 0, Game.tile_size, drawing.sizeY, Obstacle.draw_size, (byte) 0);
-				Drawing.drawing.fillForcedBox(drawing.sizeX + Game.tile_size / 2, drawing.sizeY / 2, 0, Game.tile_size, drawing.sizeY, Obstacle.draw_size, (byte) 0);
-			}
-
-			for (IDrawable d: this.drawables[i])
-			{
-				d.draw();
-
-				if (d instanceof Movable)
-					((Movable) d).drawTeam();
-			}
-
-			if (Game.glowEnabled)
-			{
-				for (int j = 0; j < this.drawables[i].size(); j++)
-				{
-					IDrawable d = this.drawables[i].get(j);
-
-					if (d instanceof IDrawableWithGlow && ((IDrawableWithGlow) d).isGlowEnabled())
-						((IDrawableWithGlow) d).drawGlow();
-				}
-			}
-
-			drawables[i].clear();
-		}
-
-		if (!paused && !Game.game.window.touchscreen)
-		{
-			if (eraseMode && !selectMode && !changeCameraMode)
-			{
-				Drawing.drawing.setColor(255, 0, 0, 64);
-
-				if (Game.enable3d)
-					Drawing.drawing.fillBox(mouseObstacle.posX, mouseObstacle.posY, 0, Game.tile_size, Game.tile_size, Game.tile_size, (byte) 64);
-				else
-					Drawing.drawing.fillRect(mouseObstacle.posX, mouseObstacle.posY, Game.tile_size, Game.tile_size);
-			}
-			else if (pasteMode && !changeCameraMode)
-			{
-				Drawing.drawing.setColor(255, 255, 255, 127);
-				Drawing.drawing.drawImage("icons/paste.png", mouseObstacle.posX, mouseObstacle.posY, Game.tile_size, Game.tile_size);
-
-				for (Object o: this.clipboard)
-				{
-					if (o instanceof Obstacle)
-					{
-						Obstacle ob = (Obstacle) o;
-						Drawing.drawing.setColor(ob.colorR, ob.colorG, ob.colorB, 64);
-						Drawing.drawing.fillRect(ob.posX + mouseTank.posX, ob.posY + mouseTank.posY, /*0,*/ Game.tile_size, Game.tile_size/*, ((Obstacle) o).stackHeight * Game.tile_size, (byte) 64*/);
-					}
-					else if (o instanceof Tank)
-					{
-						((Tank) o).drawOutlineAt(((Tank) o).posX + mouseTank.posX, ((Tank) o).posY + mouseTank.posY);
-					}
-				}
-			}
-			else if ((currentPlaceable == Placeable.enemyTank || currentPlaceable == Placeable.playerTank)  && !selectMode && !changeCameraMode)
-			{
-				mouseTank.drawOutline();
-				mouseTank.drawTeam();
-
-				if (currentPlaceable == Placeable.playerTank && !this.movePlayer)
-				{
-					Drawing.drawing.setColor(0, 200, 255, 127);
-					Drawing.drawing.drawImage("emblems/player_spawn.png", mouseTank.posX, mouseTank.posY, mouseTank.size * 0.7, mouseTank.size * 0.7);
-				}
-			}
-			else if (currentPlaceable == Placeable.obstacle && !selectMode && !changeCameraMode)
-			{
-				if (mouseObstacle.enableStacking && Game.enable3d)
-				{
-					Drawing.drawing.setColor(255, 255, 255, 64);
-					Drawing.drawing.fillBox(mouseObstacle.posX, mouseObstacle.posY, 0, Game.tile_size, Game.tile_size, mouseObstacleHeight * Game.tile_size, (byte) 64);
-				}
-
-				mouseObstacle.drawOutline();
-
-				if (mouseObstacle instanceof ObstacleBeatBlock)
-				{
-					Drawing.drawing.setFontSize(16);
-					Drawing.drawing.drawText(mouseObstacle.posX, mouseObstacle.posY, (int) Math.pow(2, mouseObstacleBeatPattern / 2) + (mouseObstacleBeatPattern % 2 == 1 ? "b" : "a"));
-				}
-				else if (mouseObstacleHeight != 1.0 && mouseObstacle.enableStacking)
-				{
-					Drawing.drawing.setFontSize(16);
-					Drawing.drawing.drawText(mouseObstacle.posX, mouseObstacle.posY, mouseObstacleHeight + "");
-				}
-			}
-		}
-
-		double extra = Math.sin(System.currentTimeMillis() * Math.PI / 1000.0) * 25;
-		Drawing.drawing.setColor(230 + extra, 230 + extra, 230 + extra, 128);
-
-		if (selectedTiles != null)
-		{
-			for (int i = 0; i < selectedTiles.length; i++)
-			{
-				for (int j = 0; j < selectedTiles[i].length; j++)
-				{
-					if (selectedTiles[i][j])
-						Drawing.drawing.fillRect((i + 0.5) * Game.tile_size, (j + 0.5) * Game.tile_size, Game.tile_size, Game.tile_size);
-				}
-			}
-		}
-
-		if (changeCameraMode && !paused)
-		{
-			Drawing.drawing.setColor(0, 0, 0, 127);
-
-			Drawing.drawing.fillInterfaceRect(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2, 500 * objWidth / 350, 150 * objHeight / 40);
-
-			Drawing.drawing.setColor(255, 255, 255);
-
-			Drawing.drawing.setInterfaceFontSize(this.textSize);
-			Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - this.objYSpace / 2, "Drag to pan");
-
-			if (Game.game.window.touchscreen)
-			{
-				Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - 0, "Pinch to zoom");
-				recenter.draw();
+    public Placeable currentPlaceable = Placeable.enemyTank;
+    public int tankNum = 0;
+    public int obstacleNum = 0;
+
+    public GameObject mousePlaceable = new TankDummy("dummy", 0, 0, 0);
+    public HashMap<String, Object> currentMetadata = new HashMap<>();
+
+    public EditorClipboard clipboard = new EditorClipboard();
+
+    public ArrayList<EditorAction> undoActions = new ArrayList<>();
+    public ArrayList<EditorAction> redoActions = new ArrayList<>();
+    public int undoCount = 1;
+    public int redoCount = 1;
+    public int redoLength = -1;
+
+    public int tankPage = 0;
+    public int obstaclePage = 0;
+
+    public Obstacle hoverObstacle = null;
+    public EditorButtons buttons = new EditorButtons(this);
+
+    public boolean stagger = false;
+    public boolean oddStagger = false;
+    public boolean paused = false;
+
+    public boolean objectMenu = false;
+
+    public double clickCooldown = 0;
+    public ArrayList<Team> teams = new ArrayList<>();
+    public ArrayList<TankSpawnMarker> spawns = new ArrayList<>();
+
+    public Level level;
+    public String name;
+
+    public boolean movePlayer = true;
+
+    public enum EditorMode
+    {build, erase, camera, select, picker, paste}
+
+    public EditorMode previousMode = EditorMode.build;
+    public EditorMode currentMode = EditorMode.build;
+
+    public boolean symmetrySelectMode = false;
+
+    public enum BuildTool
+    {normal, circle, rectangle, line}
+
+    public BuildTool buildTool = BuildTool.normal;
+
+    public enum SelectTool
+    {normal, wand_contiguous, wand_discontiguous}
+
+    public SelectTool selectTool = SelectTool.normal;
+
+    public Shape prevSelectShape;
+    public double selectX1, selectY1, selectX2, selectY2;
+
+    public ArrayList<EditorButton> shortcutButtons = new ArrayList<>();
+    public boolean initialized = false;
+
+    public SymmetryType symmetryType = SymmetryType.none;
+    public double symmetryX1, symmetryY1, symmetryX2, symmetryY2;
+
+    public boolean selectHeld = false;
+    public boolean selectInverted = false;
+    public boolean selection = false;
+    public boolean heightBlocksSelected = false;
+    public boolean lockAdd = true;
+    public boolean lockSquare = false;
+    public boolean[][] selectedTiles;
+    public boolean showControls = true;
+    public double controlsSizeMultiplier = 0.75;
+
+    public boolean panDown;
+    public double panX;
+    public double panY;
+    public double panCurrentX;
+    public double panCurrentY;
+    public double zoomCurrentX;
+    public double zoomCurrentY;
+    public boolean zoomDown;
+    public double zoomDist;
+    public double offsetX;
+    public double offsetY;
+    public double zoom = 1;
+    public int validZoomFingers = 0;
+
+    public boolean invertOrthographic = false;
+
+    public HashSet<String> prevTankMusics = new HashSet<>();
+    public HashSet<String> tankMusics = new HashSet<>();
+    public HashSet<String> overlayMusics = new HashSet<>();
+
+    public double fontBrightness = 0;
+
+    public boolean modified = true;
+
+    public EditorButton touchscreenSelectedButton = null;
+
+    EditorButton pause = new EditorButton(buttons.topRight, "pause.png", 40, 40, () ->
+    {
+        paused = true;
+        Game.screen = new OverlayEditorMenu(Game.screen, (ScreenLevelEditor) Game.screen);
+    }, "Pause (%s)", Game.game.input.editorPause
+    );
+
+    EditorButton menu = new EditorButton(buttons.topRight, "menu.png", 50, 50, () ->
+    {
+        this.paused = true;
+        this.objectMenu = true;
+        Game.screen = new OverlayObjectMenu(Game.screen, this);
+    },
+        () -> false, () -> this.level.editable && (!paused || objectMenu),
+        "Object menu (%s)", Game.game.input.editorObjectMenu
+    );
+    EditorButton playControl = new EditorButton(buttons.topRight, "play.png", 30, 30,
+        this::play, () -> this.spawns.isEmpty(), "Play (%s)", Game.game.input.editorPlay);
+
+    public Button recenter = new Button(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 1.5, 300, 35, "Re-center", new Runnable()
+    {
+        @Override
+        public void run()
+        {
+            zoom = 1;
+            offsetX = 0;
+            offsetY = 0;
+        }
+    }
+    );
+
+    EditorButton place = new EditorButton(buttons.topLeft, "pencil.png", 40, 40,
+        new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                if (place.enabled)
+                {
+                    if (currentMode != EditorMode.build)
+                        setMode(EditorMode.build);
+                    else if (place.option != 0)
+                    {
+                        place.option = 0;
+                        place.setOption();
+                    }
+                }
+            }
+        },
+        new ToBooleanFunction()
+        {
+            @Override
+            public boolean apply()
+            {
+                place.disabledClick = Game.game.window.touchscreen;
+                if (currentMode == EditorMode.build)
+                {
+                    if (!place.showSubButtons)
+                        return true;
+                    else
+                        return buildTool == BuildTool.normal;
+                }
+
+                return false;
+            }
+        },
+        "Build (%s)", Game.game.input.editorBuild
+    )
+        .addSubButtons(
+            new EditorButton("square.png", 40, 40, () ->
+            {
+                this.setMode(EditorMode.build);
+                buildTool = BuildTool.rectangle;
+            }, () -> buildTool == BuildTool.rectangle, "Square tool (%s)", Game.game.input.editorSquare),
+            new EditorButton("circle.png", 40, 40, () ->
+            {
+                this.setMode(EditorMode.build);
+                buildTool = BuildTool.circle;
+            }, () -> buildTool == BuildTool.circle, "Circle tool (%s)", Game.game.input.editorCircle),
+            new EditorButton("line.png", 40, 40, () ->
+            {
+                this.setMode(EditorMode.build);
+                buildTool = BuildTool.line;
+            }, () -> buildTool == BuildTool.line, "Line tool (%s)", Game.game.input.editorLine)
+        )
+        .onReset(() -> buildTool = BuildTool.normal);
+
+    EditorButton erase = new EditorButton(buttons.topLeft, "eraser.png", 40, 40,
+        () -> this.setMode(EditorMode.erase),
+        () -> this.currentMode == EditorMode.erase,
+        "Erase (%s)", Game.game.input.editorErase
+    );
+
+    EditorButton panZoom = new EditorButton(buttons.topLeft, "zoom_pan.png", 40, 40,
+        () -> setMode(EditorMode.camera),
+        () -> this.currentMode == EditorMode.camera
+        , "Adjust camera (%s)", Game.game.input.editorCamera
+    );
+
+    EditorButton togglePerspective = new EditorButton(buttons.topRight, "perspective.png", 50, 50,
+            () -> { this.invertOrthographic = !this.invertOrthographic; },
+            () -> false,
+            "Change perspective (%s)", Game.game.input.editorChangePerspective
+    );
+
+    EditorButton select = new EditorButton(buttons.topLeft, "select.png", 40, 40,
+        new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                if (select.enabled)
+                {
+                    if (currentMode != EditorMode.select)
+                        setMode(EditorMode.select);
+                    else if (select.option != 0)
+                    {
+                        select.option = 0;
+                        select.setOption();
+                    }
+                }
+            }
+        },
+        new ToBooleanFunction()
+        {
+            @Override
+            public boolean apply()
+            {
+                select.disabledClick = Game.game.window.touchscreen;
+                if (currentMode == EditorMode.select)
+                {
+                    if (!select.showSubButtons)
+                        return true;
+                    else
+                        return selectTool == SelectTool.normal;
+                }
+
+                return false;
+            }
+        }
+        , "Select (%s)", Game.game.input.editorSelect
+    )
+        .addSubButtons(new EditorButton("wand_contiguous.png", 40, 40, () ->
+            {
+                this.setMode(EditorMode.select);
+                selectTool = SelectTool.wand_contiguous;
+            }, () -> selectTool == SelectTool.wand_contiguous, "Contiguous wand tool (%s)", Game.game.input.editorWand),
+            new EditorButton("wand_discontiguous.png", 40, 40, () ->
+            {
+                this.setMode(EditorMode.select);
+                selectTool = SelectTool.wand_discontiguous;
+            }, () -> selectTool == SelectTool.wand_discontiguous, "Non-contiguous wand tool (%s)", Game.game.input.editorWandDiscontiguous))
+        .onReset(() -> selectTool = SelectTool.normal);
+
+    EditorButton grab = new EditorButton(buttons.topLeft, "eyedropper.png", 50, 50,
+        () -> this.setMode(EditorMode.picker),
+        () -> this.currentMode == EditorMode.picker
+        , "Picker (%s)", Game.game.input.editorPickBlock
+    );
+
+    EditorButton undo = new EditorButton(buttons.bottomLeft, "undo.png", 40, 40, () ->
+    {
+        if (undoActions.isEmpty())
+            return;
+
+        int s = undoActions.size();
+        for (int i = 0; i < Math.min(s, undoCount); i++)
+        {
+            EditorAction a = undoActions.remove(undoActions.size() - 1);
+            a.undo();
+            redoActions.add(a);
+            redoLength = undoActions.size();
+        }
+    }, () -> undoActions.isEmpty(), "Undo (%s)", Game.game.input.editorUndo
+    )
+        .addSubButtons(
+            new EditorButton("undo10.png", 50, 50, new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    undoCount = 10;
+                    undo.function.run();
+                    undoCount = 1;
+                }
+            }, () -> false, "Undo 10x (Shift %s)", Game.game.input.editorUndo),
+            new EditorButton("undo50.png", 50, 50, new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    undoCount = 50;
+                    undo.function.run();
+                    undoCount = 1;
+                }
+            }, () -> false, "Undo 50x (Alt %s)", Game.game.input.editorUndo)
+        ).setSubButtonsAsOptions(false);
+
+    EditorButton redo = new EditorButton(buttons.bottomLeft, "redo.png", 40, 40, () ->
+    {
+        if (redoActions.isEmpty())
+            return;
+
+        int s = redoActions.size();
+        for (int i = 0; i < Math.min(s, redoCount); i++)
+        {
+            EditorAction a = redoActions.remove(redoActions.size() - 1);
+            a.redo();
+            undoActions.add(a);
+            redoLength = undoActions.size();
+        }
+    }, () -> redoActions.isEmpty(), "Redo (%s)", Game.game.input.editorRedo
+    )
+        .addSubButtons(
+            new EditorButton("redo10.png", 50, 50, new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    redoCount = 10;
+                    redo.function.run();
+                    redoCount = 1;
+                }
+            }, () -> false, "Redo 10x (Shift %s)", Game.game.input.editorRedo),
+            new EditorButton("redo50.png", 50, 50, new Runnable()
+            {
+                @Override
+                public void run()
+                {
+                    redoCount = 50;
+                    redo.function.run();
+                    redoCount = 1;
+                }
+            }, () -> false, "Redo 50x (Alt %s)", Game.game.input.editorRedo)
+        ).setSubButtonsAsOptions(false);
+
+    EditorButton copy = new EditorButton(buttons.topRight, "copy.png", 50, 50, () -> this.copy(false),
+        () -> false, () -> selection, "Copy (%s)", Game.game.input.editorCopy);
+    EditorButton cut = new EditorButton(buttons.topRight, "cut.png", 50, 50, () -> this.copy(true),
+        () -> false, () -> selection, "Cut (%s)", Game.game.input.editorCut);
+    EditorButton paste = new EditorButton(buttons.topLeft, "paste.png", 50, 50, () ->
+    {
+        if (this.currentMode == EditorMode.paste)
+            this.paste();
+
+        Game.game.window.pressedKeys.clear();
+        Game.game.window.pressedButtons.clear();
+        setMode(EditorMode.paste);
+    }, () -> this.currentMode == EditorMode.paste || clipboard.isEmpty(), () -> !clipboard.isEmpty(), "Paste (%s)", Game.game.input.editorPaste
+    );
+
+    EditorButton flipHoriz = new EditorButton(buttons.bottomRight, "flip_horizontal.png", 50, 50, () -> clipboard.flipHorizontal(),
+        () -> false, () -> this.currentMode == EditorMode.paste, "Flip horizontal (%s)", Game.game.input.editorFlipHoriz);
+    EditorButton flipVert = new EditorButton(buttons.bottomRight, "flip_vertical.png", 50, 50, () -> clipboard.flipVertical(),
+        () -> false, () -> this.currentMode == EditorMode.paste, "Flip vertical (%s)", Game.game.input.editorFlipVert);
+    EditorButton rotate = new EditorButton(buttons.bottomRight, "rotate_obstacle.png", 50, 50, () -> clipboard.rotate(),
+        () -> false, () -> this.currentMode == EditorMode.paste, "Rotate clockwise (%s)", Game.game.input.editorRotateClockwise);
+
+    EditorButton selectSquareToggle = new EditorButton(buttons.bottomRight, "square_unlocked.png", 40, 40, () ->
+        lockSquare = !lockSquare, () -> false, () -> this.currentMode == EditorMode.select, "", Game.game.input.editorLockSquare
+    ).setDescription("Lock square selecting (Hold: %s, Toggle: %s)", Game.game.input.editorHoldSquare.getInputs(), Game.game.input.editorLockSquare.getInputs());
+
+    EditorButton selectAddToggle = new EditorButton(buttons.bottomRight, "select_add.png", 40, 40, () ->
+        lockAdd = !lockAdd, () -> false, () -> this.currentMode == EditorMode.select, "Toggle select/deselect (%s)", Game.game.input.editorSelectAddToggle
+    );
+
+    EditorButton selectClear = new EditorButton(buttons.bottomRight, "select_clear.png", 40, 40, this::clearSelection, () -> !selection, () -> this.currentMode == EditorMode.select || selection, "Clear selection (%s)", Game.game.input.editorDeselect);
+
+    @SuppressWarnings("unchecked")
+    protected ArrayList<IDrawable>[] drawables = (ArrayList<IDrawable>[]) (new ArrayList[10]);
+
+    public ScreenLevelEditor(String lvlName, Level level)
+    {
+        this.selfBatch = false;
+        this.drawDarkness = false;
+
+        this.music = "battle_editor.ogg";
+        this.musicID = "editor";
+
+        // todo
+        this.allowClose = false;
+
+        if (Game.game.window.touchscreen)
+            controlsSizeMultiplier = 1.0;
+
+        this.level = level;
+        this.enableMargins = false;
+
+        this.setMousePlaceable();
+
+        for (int i = 0; i < drawables.length; i++)
+        {
+            drawables[i] = new ArrayList<>();
+        }
+
+        Obstacle.draw_size = Game.tile_size;
+
+        Game.game.window.validScrollDown = false;
+        Game.game.window.validScrollUp = false;
+
+        this.name = lvlName;
+    }
+
+    public void setMode(EditorMode mode)
+    {
+        if (previousMode == EditorMode.paste && clipboard.isEmpty())
+            return;
+
+        if (this.currentMode != mode)
+            this.previousMode = this.currentMode;
+
+        this.currentMode = mode;
+        this.setMousePlaceable();
+    }
+
+    public void updateMusic(boolean tanks)
+    {
+        if (Game.screen instanceof ScreenGame)
+            return;
+
+        this.prevTankMusics.clear();
+        this.prevTankMusics.addAll(this.tankMusics);
+        this.tankMusics.clear();
+
+        this.tankMusics.addAll(this.overlayMusics);
+        this.overlayMusics.clear();
+
+        if (tanks)
+        {
+            for (Movable m : Game.movables)
+            {
+                if (m instanceof Tank && !m.destroy)
+                {
+                    this.tankMusics.addAll(((Tank) m).musicTracks);
+                }
+            }
+
+            Game.currentLevel.beatBlocks = 0;
+
+            for (Obstacle o : Game.obstacles)
+            {
+                if (o instanceof ObstacleBeatBlock)
+                {
+                    Game.currentLevel.synchronizeMusic = true;
+                    Game.currentLevel.beatBlocks |= (int) ((ObstacleBeatBlock) o).beatFrequency;
+                    break;
+                }
+            }
+
+            if (Game.currentLevel.beatBlocks > 0)
+            {
+                this.tankMusics.add("beatblocks/beat_blocks.ogg");
+            }
+        }
+
+        for (String m : this.prevTankMusics)
+        {
+            if (!this.tankMusics.contains(m))
+                Drawing.drawing.removeSyncedMusic(m, 500);
+        }
+
+        for (String m : this.tankMusics)
+        {
+            if (!this.prevTankMusics.contains(m))
+                Drawing.drawing.addSyncedMusic(m, Game.musicVolume * 0.5f, true, 500);
+        }
+    }
+
+    public boolean grab()
+    {
+        Game.game.input.editorPickBlock.invalidate();
+
+        Tank t = Tank.findTank(mousePlaceable.posX, mousePlaceable.posY);
+
+        if (t != null)
+        {
+            if (t.name.equals("player"))
+            {
+                this.currentPlaceable = Placeable.playerTank;
+                this.setMousePlaceable();
+                setMousePlaceableMetadata(t.getMetadata());
+
+                ((TankPlayer) mousePlaceable).setDefaultColor();
+                return true;
+            }
+            else
+            {
+                for (int i = 0; i < Game.registryTank.tankEntries.size(); i++)
+                {
+                    RegistryTank.TankEntry e = Game.registryTank.getEntry(i);
+                    if (e.name.equals(t.name))
+                    {
+                        tankNum = i;
+                        this.currentPlaceable = Placeable.enemyTank;
+                        this.setMousePlaceable();
+                        setMousePlaceableMetadata(t.getMetadata());
+                        return true;
+                    }
+                }
+
+                for (int i = 0; i < this.level.customTanks.size(); i++)
+                {
+                    if (this.level.customTanks.get(i).name.equals(t.name))
+                    {
+                        tankNum = Game.registryTank.tankEntries.size() + i;
+                        this.currentPlaceable = Placeable.enemyTank;
+                        this.setMousePlaceable();
+                        setMousePlaceableMetadata(t.getMetadata());
+                        return true;
+                    }
+                }
+            }
+        }
+
+        Obstacle o = Game.getObstacle(mousePlaceable.posX, mousePlaceable.posY);
+
+        if (o == null)
+            return false;
+
+        int i = 0;
+        for (RegistryObstacle.ObstacleEntry entry : Game.registryObstacle.obstacleEntries)
+        {
+            if (entry.obstacle.equals(o.getClass()))
+                break;
+            i++;
+        }
+
+        this.currentPlaceable = Placeable.obstacle;
+        obstacleNum = i;
+        this.setMousePlaceable();
+        setMousePlaceableMetadata(o.getMetadata());
+        return true;
+    }
+
+    public void setMousePlaceableMetadata(String meta)
+    {
+        mousePlaceable.setMetadata(meta);
+        for (String s : mousePlaceable.getMetadataProperties().keySet())
+        {
+            currentMetadata.put(s, mousePlaceable.getMetadataProperty(s).getMetadata(mousePlaceable));
+        }
+    }
+
+    @Override
+    public void update()
+    {
+        if (!initialized)
+            initialize();
+
+        if (Level.isDark())
+            this.fontBrightness = 255;
+        else
+            this.fontBrightness = 0;
+
+        if (clipboard == null)
+            clipboard = new EditorClipboard();
+
+        if (mousePlaceable instanceof Tank)
+            ((Tank) mousePlaceable).angle = ((Tank) mousePlaceable).orientation;
+
+//		allowClose = this.undoActions.isEmpty() && !modified;
+        clickCooldown = Math.max(0, clickCooldown - Panel.frameFrequency);
+
+        if (grab.keybind.isValid())
+        {
+            if (!this.grab())
+                this.currentMode = EditorMode.picker;
+            else
+                this.currentMode = EditorMode.build;
+        }
+
+        if (!undoActions.isEmpty() && undo.keybind.isValid())
+        {
+            if (Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_SHIFT) || Game.game.window.pressedKeys.contains(InputCodes.KEY_RIGHT_SHIFT))
+                this.undoCount = 10;
+
+            if (Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_ALT) || Game.game.window.pressedKeys.contains(InputCodes.KEY_RIGHT_ALT))
+                this.undoCount = 50;
+
+            if (this.undoCount > 1)
+            {
+                this.undo.function.run();
+                this.undoCount = 1;
+                this.undo.keybind.invalidate();
+            }
+        }
+
+        if (!redoActions.isEmpty() && redo.keybind.isValid())
+        {
+            if (Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_SHIFT) || Game.game.window.pressedKeys.contains(InputCodes.KEY_RIGHT_SHIFT))
+                this.redoCount = 10;
+
+            if (Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_ALT) || Game.game.window.pressedKeys.contains(InputCodes.KEY_RIGHT_ALT))
+                this.redoCount = 50;
+
+            if (this.redoCount > 1)
+            {
+                this.redo.function.run();
+                this.redoCount = 1;
+                this.redo.keybind.invalidate();
+            }
+        }
+
+
+        if (!Game.enable3d)
+            this.buttons.topRight.remove(this.togglePerspective);
+        else
+        {
+            if (Game.orthographicView != this.invertOrthographic)
+                this.togglePerspective.image = "icons/orthographic.png";
+            else
+                this.togglePerspective.image = "icons/perspective.png";
+        }
+
+        this.buttons.bottomRight.removeAll(this.shortcutButtons);
+
+        if (this.currentMode == EditorMode.build)
+            this.buttons.bottomRight.addAll(this.shortcutButtons);
+
+        if (Game.game.input.editorPaste.isValid() && !clipboard.isEmpty())
+        {
+            if (this.currentMode == EditorMode.paste)
+                this.paste();
+            else
+                paste.function.run();
+
+            Game.game.input.editorPaste.invalidate();
+        }
+
+        if (this.currentMode == EditorMode.camera && Game.game.input.editorCamera.isValid())
+        {
+            Game.game.input.editorCamera.invalidate();
+            this.setMode(this.previousMode);
+        }
+
+        if (this.currentMode == EditorMode.erase && Game.game.input.editorErase.isValid())
+        {
+            Game.game.input.editorErase.invalidate();
+            this.setMode(this.previousMode);
+        }
+
+        if (this.currentMode == EditorMode.camera && Game.game.input.editorCamera.isValid())
+        {
+            Game.game.input.editorCamera.invalidate();
+            this.setMode(this.previousMode);
+        }
+
+        if (this.currentMode == EditorMode.build && Game.game.input.editorBuild.isValid() && place.option == 0)
+        {
+            Game.game.input.editorBuild.invalidate();
+            this.setMode(this.previousMode);
+        }
+
+        if (this.currentMode == EditorMode.select && Game.game.input.editorSelect.isValid() && select.option == 0)
+        {
+            Game.game.input.editorSelect.invalidate();
+            this.setMode(this.previousMode);
+        }
+
+        if (Game.game.input.editorChangePerspective.isValid())
+        {
+            Game.game.input.editorChangePerspective.invalidate();
+            this.invertOrthographic = !this.invertOrthographic;
+        }
+
+        this.buttons.refreshButtons();
+        this.buttons.update();
+
+        this.updateMusic(true);
+
+        if (Game.game.input.editorPause.isValid() && this.level.editable)
+        {
+            this.paused = true;
+            Game.game.input.editorPause.invalidate();
+            Game.screen = new OverlayEditorMenu(Game.screen, this);
+        }
+
+        if (Game.game.input.editorObjectMenu.isValid() && this.level.editable && (!paused || objectMenu))
+        {
+            Game.game.input.editorObjectMenu.invalidate();
+            this.paused = true;
+            this.objectMenu = true;
+            Game.screen = new OverlayObjectMenu(Game.screen, this);
+        }
+
+        if (Game.game.input.editorCopy.isValid() && selection)
+        {
+            Game.game.input.editorCopy.invalidate();
+            copy.function.run();
+        }
+
+        if (Game.game.input.editorCut.isValid() && selection)
+        {
+            Game.game.input.editorCut.invalidate();
+            cut.function.run();
+        }
+
+        for (Effect e : Game.effects)
+            e.update();
+
+        if (this.paused)
+            return;
+
+        if (Game.game.input.editorRevertCamera.isValid())
+        {
+            zoom = 1;
+            offsetX = 0;
+            offsetY = 0;
+
+            Game.game.input.editorRevertCamera.invalidate();
+        }
+
+        if (currentMode == EditorMode.camera || Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_ALT))
+        {
+            if (Game.game.input.editorZoomOut.isPressed())
+                zoom *= Math.pow(0.99, Panel.frameFrequency);
+            else if (Game.game.window.validScrollDown)
+            {
+                Game.game.window.validScrollDown = false;
+                zoom *= 0.975;
+            }
+
+            if (Game.game.input.editorZoomIn.isPressed())
+                zoom *= Math.pow(1.01, Panel.frameFrequency);
+            else if (Game.game.window.validScrollUp)
+            {
+                Game.game.window.validScrollUp = false;
+                zoom *= 1.025;
+            }
+
+            if (Game.game.window.touchscreen)
+                recenter.update();
+        }
+        else if (currentMode == EditorMode.build)
+        {
+            boolean up = false;
+            boolean down = false;
+
+            if (Game.game.input.editorNextType.isValid())
+            {
+                Game.game.input.editorNextType.invalidate();
+                down = true;
+            }
+            else if (Game.game.window.validScrollDown)
+            {
+                Game.game.window.validScrollDown = false;
+                down = true;
+            }
+
+            if (Game.game.input.editorPrevType.isValid())
+            {
+                Game.game.input.editorPrevType.invalidate();
+                up = true;
+            }
+            else if (Game.game.window.validScrollUp)
+            {
+                Game.game.window.validScrollUp = false;
+                up = true;
+            }
+
+            if (down && currentPlaceable == Placeable.enemyTank)
+            {
+                tankNum = (tankNum + 1) % (Game.registryTank.tankEntries.size() + this.level.customTanks.size());
+                this.setMousePlaceable();
+            }
+            else if (down && currentPlaceable == Placeable.obstacle)
+            {
+                obstacleNum = (obstacleNum + 1) % Game.registryObstacle.obstacleEntries.size();
+                this.setMousePlaceable();
+            }
+
+            if (up && currentPlaceable == Placeable.enemyTank)
+            {
+                tankNum = ((tankNum - 1) + Game.registryTank.tankEntries.size() + this.level.customTanks.size()) % (Game.registryTank.tankEntries.size() + this.level.customTanks.size());
+                this.setMousePlaceable();
+
+            }
+            else if (up && currentPlaceable == Placeable.obstacle)
+            {
+                obstacleNum = ((obstacleNum - 1) + Game.registryObstacle.obstacleEntries.size()) % Game.registryObstacle.obstacleEntries.size();
+                this.setMousePlaceable();
+            }
+
+            if ((up || down) && !(up && down))
+                this.movePlayer = !this.movePlayer;
+
+            boolean right = false;
+            boolean left = false;
+
+            if (Game.game.input.editorNextObj.isValid())
+            {
+                Game.game.input.editorNextObj.invalidate();
+                right = true;
+            }
+
+            if (Game.game.input.editorPrevObj.isValid())
+            {
+                Game.game.input.editorPrevObj.invalidate();
+                left = true;
+            }
+
+            if (right)
+            {
+                if (currentPlaceable == Placeable.enemyTank)
+                {
+                    this.currentPlaceable = Placeable.obstacle;
+                    this.setMousePlaceable();
+                }
+                else if (currentPlaceable == Placeable.obstacle)
+                {
+                    this.currentPlaceable = Placeable.playerTank;
+                    this.setMousePlaceable();
+                }
+                else if (currentPlaceable == Placeable.playerTank)
+                {
+                    this.currentPlaceable = Placeable.enemyTank;
+                    this.setMousePlaceable();
+                }
+            }
+
+            if (left)
+            {
+                if (currentPlaceable == Placeable.playerTank)
+                {
+                    this.currentPlaceable = Placeable.obstacle;
+                    this.setMousePlaceable();
+                }
+                else if (currentPlaceable == Placeable.obstacle)
+                {
+                    this.currentPlaceable = Placeable.enemyTank;
+                    this.setMousePlaceable();
+                }
+                else if (currentPlaceable == Placeable.enemyTank)
+                {
+                    this.currentPlaceable = Placeable.playerTank;
+                    this.setMousePlaceable();
+                }
+            }
+
+            updateMetadata();
+        }
+        else if (currentMode == EditorMode.select)
+            updateMetadata();
+
+        double prevZoom = zoom;
+        double prevOffsetX = offsetX;
+        double prevOffsetY = offsetY;
+
+        boolean prevPanDown = panDown;
+        boolean prevZoomDown = zoomDown;
+
+        panDown = false;
+        zoomDown = false;
+
+        validZoomFingers = 0;
+        if (!Game.game.window.touchscreen)
+        {
+            double mx = Drawing.drawing.getMouseX();
+            double my = Drawing.drawing.getMouseY();
+
+            boolean[] handled = checkMouse(mx, my,
+                Game.game.input.editorUse.isPressed() && !Game.game.input.editorAction.isPressed(),
+                Game.game.input.editorAction.isPressed(),
+                Game.game.input.editorUse.isValid() && !Game.game.input.editorAction.isPressed(),
+                Game.game.input.editorAction.isValid());
+
+            if (Game.game.input.editorUse.isPressed() && Game.game.input.editorAction.isPressed())
+                Game.game.input.editorAction.unpress();
+
+            if (handled[0])
+                Game.game.input.editorUse.invalidate();
+
+            if (handled[1])
+                Game.game.input.editorAction.invalidate();
+        }
+        else
+        {
+            boolean input = false;
+
+            for (int i : Game.game.window.touchPoints.keySet())
+            {
+                InputPoint p = Game.game.window.touchPoints.get(i);
+
+                if (p.tag.isEmpty() || p.tag.equals("levelbuilder"))
+                {
+                    input = true;
+
+                    double mx = Drawing.drawing.toGameCoordsX(Drawing.drawing.getInterfacePointerX(p.x));
+                    double my = Drawing.drawing.toGameCoordsY(Drawing.drawing.getInterfacePointerY(p.y));
+
+                    this.touchscreenSelectedButton = null;
+
+                    boolean[] handled = checkMouse(mx, my, true, false, !p.tag.equals("levelbuilder"), false);
+
+                    if (handled[0])
+                        p.tag = "levelbuilder";
+                }
+            }
+
+            if (!input)
+                checkMouse(0, 0, false, false, false, false);
+
+            if (validZoomFingers == 0)
+                panDown = false;
+        }
+
+        double px = Drawing.drawing.gameToInterfaceCoordsX(panCurrentX);
+        double py = Drawing.drawing.gameToInterfaceCoordsY(panCurrentY);
+
+        if (!zoomDown && panDown)
+        {
+            if (prevPanDown && !prevZoomDown)
+            {
+                offsetX += panCurrentX - panX;
+                offsetY += panCurrentY - panY;
+            }
+
+            panX = Drawing.drawing.toGameCoordsX(px);
+            panY = Drawing.drawing.toGameCoordsY(py);
+        }
+
+
+        if (zoomDown)
+        {
+            double zx = Drawing.drawing.gameToInterfaceCoordsX(zoomCurrentX);
+            double zy = Drawing.drawing.gameToInterfaceCoordsY(zoomCurrentY);
+            double d = Math.sqrt(Math.pow(px - zx, 2) + Math.pow(py - zy, 2));
+
+            if (prevZoomDown)
+            {
+                zoom *= d / zoomDist;
+                zoom = Math.max(0.75, Math.min(Math.max(2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale), 1), zoom));
+                Drawing.drawing.scale = getScale();
+
+                panCurrentX = Drawing.drawing.toGameCoordsX(px);
+                panCurrentY = Drawing.drawing.toGameCoordsY(py);
+                zoomCurrentX = Drawing.drawing.toGameCoordsX(zx);
+                zoomCurrentY = Drawing.drawing.toGameCoordsY(zy);
+
+                double x = (panCurrentX + zoomCurrentX) / 2;
+                double y = (panCurrentY + zoomCurrentY) / 2;
+                offsetX += x - panX;
+                offsetY += y - panY;
+            }
+
+            panCurrentX = Drawing.drawing.toGameCoordsX(px);
+            panCurrentY = Drawing.drawing.toGameCoordsY(py);
+            zoomCurrentX = Drawing.drawing.toGameCoordsX(zx);
+            zoomCurrentY = Drawing.drawing.toGameCoordsY(zy);
+
+            double x = (panCurrentX + zoomCurrentX) / 2;
+            double y = (panCurrentY + zoomCurrentY) / 2;
+            panX = x;
+            panY = y;
+            zoomDist = d;
+        }
+
+        zoom = Math.max(0.75, Math.min(Math.max(2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale), 1), zoom));
+
+        offsetX = Math.min(Game.currentSizeX * Game.tile_size / 2, Math.max(-Game.currentSizeX * Game.tile_size / 2, offsetX));
+        offsetY = Math.min(Game.currentSizeY * Game.tile_size / 2, Math.max(-Game.currentSizeY * Game.tile_size / 2, offsetY));
+
+        if ((zoom == 0.75 || zoom == 2 / (Drawing.drawing.unzoomedScale / Drawing.drawing.interfaceScale)) && prevZoom != zoom)
+            Drawing.drawing.playVibration("click");
+
+        if (Math.abs(offsetX) == Game.currentSizeX * Game.tile_size / 2 && prevOffsetX != offsetX)
+            Drawing.drawing.playVibration("click");
+
+        if (Math.abs(offsetY) == Game.currentSizeY * Game.tile_size / 2 && prevOffsetY != offsetY)
+            Drawing.drawing.playVibration("click");
+
+
+        if (Game.game.input.editorPlay.isValid() && !this.spawns.isEmpty())
+        {
+            this.play();
+            Game.game.input.play.invalidate();
+        }
+
+        if (Game.game.input.editorDeselect.isValid())
+        {
+            if (selection)
+            {
+                this.clearSelection();
+            }
+        }
+
+        if (Game.game.input.editorToggleControls.isValid())
+        {
+            this.showControls = !this.showControls;
+            Game.game.input.editorToggleControls.invalidate();
+        }
+
+        if (Game.game.input.editorPaste.isValid() && this.currentMode != EditorMode.paste && !clipboard.isEmpty())
+        {
+            this.setMode(EditorMode.paste);
+            Game.game.input.editorPaste.invalidate();
+        }
+
+        if (!redoActions.isEmpty() && redoLength != undoActions.size())
+        {
+            redoActions.clear();
+            redoLength = -1;
+        }
+
+        ScreenGame.handleRemovals();
+    }
+
+    public void updateMetadata()
+    {
+        if (Game.game.input.editorPrevMeta.isValid())
+        {
+            Game.game.input.editorPrevMeta.invalidate();
+            if (currentMode == EditorMode.select && heightBlocksSelected)
+                adjustSelectionHeight(-1);
+            else if (currentMode == EditorMode.build)
+                changeMetadata(-1);
+        }
+
+        if (Game.game.input.editorNextMeta.isValid())
+        {
+            Game.game.input.editorNextMeta.invalidate();
+            if (currentMode == EditorMode.select && heightBlocksSelected)
+                adjustSelectionHeight(1);
+            else if (currentMode == EditorMode.build)
+                changeMetadata(1);
+        }
+    }
+
+    public boolean[] checkMouse(double mx, double my, boolean left, boolean right, boolean validLeft, boolean validRight)
+    {
+        boolean[] handled = new boolean[]{false, false};
+
+        double posX = Math.round((mx) / Game.tile_size + 0.5) * Game.tile_size - Game.tile_size / 2;
+        double posY = Math.round((my) / Game.tile_size + 0.5) * Game.tile_size - Game.tile_size / 2;
+        mousePlaceable.posX = posX;
+        mousePlaceable.posY = posY;
+
+        if (currentMode == EditorMode.picker)
+        {
+            if (validLeft)
+            {
+                handled[0] = true;
+                if (grab())
+                {
+                    Drawing.drawing.playVibration("heavyClick");
+                    this.setMode(EditorMode.build);
+                }
+            }
+        }
+        else if (currentMode == EditorMode.camera || (Game.game.window.pressedKeys.contains(InputCodes.KEY_LEFT_ALT) && validLeft))
+        {
+            if (validLeft)
+            {
+                if (validZoomFingers == 0)
+                {
+                    panDown = true;
+                    panCurrentX = mx;
+                    panCurrentY = my;
+                }
+                else if (validZoomFingers == 1)
+                {
+                    zoomDown = true;
+                    zoomCurrentX = mx;
+                    zoomCurrentY = my;
+                }
+
+                validZoomFingers++;
+            }
+        }
+        else if (currentMode == EditorMode.select && (selectTool == SelectTool.wand_contiguous || selectTool == SelectTool.wand_discontiguous) && (validLeft || validRight))
+        {
+            if (validRight)
+                selectInverted = !selectInverted;
+            magicSelect((int) (clampTileX(mousePlaceable.posX) / Game.tile_size), (int) (clampTileY(mousePlaceable.posY) / Game.tile_size), selectTool == SelectTool.wand_contiguous);
+
+            if (validRight)
+            {
+                selectInverted = !selectInverted;
+                handled[1] = true;
+            }
+            else
+                handled[0] = true;
+        }
+        else if ((currentMode == EditorMode.select || (specialBuildTool() && !right)))
+        {
+            if (!selection)
+                lockAdd = true;
+
+            boolean pressed = left || right;
+            boolean valid = validLeft || validRight;
+
+            if (valid)
+            {
+                selectX1 = clampTileX(mousePlaceable.posX);
+                selectY1 = clampTileY(mousePlaceable.posY);
+                selectHeld = true;
+                handled[0] = true;
+                handled[1] = true;
+
+                Drawing.drawing.playVibration("selectionChanged");
+            }
+
+            if (pressed && selectHeld)
+            {
+                double prevSelectX2 = selectX2;
+                double prevSelectY2 = selectY2;
+
+                selectX2 = clampTileX(mousePlaceable.posX);
+                selectY2 = clampTileY(mousePlaceable.posY);
+
+                if (lockSquare || Game.game.input.editorHoldSquare.isPressed())
+                {
+                    double size = Math.max(Math.abs(selectX2 - selectX1), Math.abs(selectY2 - selectY1));
+                    selectX2 = Math.signum(selectX2 - selectX1) * size + selectX1;
+                    selectY2 = Math.signum(selectY2 - selectY1) * size + selectY1;
+                }
+
+                if (prevSelectX2 != selectX2 || prevSelectY2 != selectY2)
+                    Drawing.drawing.playVibration("selectionChanged");
+            }
+
+            if (!pressed && selectHeld)
+            {
+                Drawing.drawing.playVibration("click");
+                selectHeld = false;
+
+                double lowX = Math.min(selectX1, selectX2);
+                double highX = Math.min((Game.currentSizeX - 0.5) * Game.tile_size, Math.max(selectX1, selectX2));
+                double lowY = Math.min(selectY1, selectY2);
+                double highY = Math.min((Game.currentSizeY - 0.5) * Game.tile_size, Math.max(selectY1, selectY2));
+
+                if (currentMode == EditorMode.select && selectTool == SelectTool.normal)
+                    newSelection(lowX, highX, lowY, highY);
+                else
+                    shapeFromSelection(handled, lowX, highX, lowY, highY);
+            }
+            else
+                selectInverted = selection && ((!lockAdd && !right) || (lockAdd && right));
+        }
+        else if (symmetrySelectMode && currentMode != EditorMode.paste)
+        {
+            if (validLeft)
+            {
+                selectX1 = clampTileX(mousePlaceable.posX);
+                selectY1 = clampTileY(mousePlaceable.posY);
+                selectHeld = true;
+                handled[0] = true;
+                handled[1] = true;
+
+                Drawing.drawing.playVibration("selectionChanged");
+            }
+
+            if (left && selectHeld)
+            {
+                double prevSelectX2 = selectX2;
+                double prevSelectY2 = selectY2;
+
+                selectX2 = clampTileX(mousePlaceable.posX);
+                selectY2 = clampTileY(mousePlaceable.posY);
+
+                if (symmetryType == SymmetryType.flip8 || symmetryType == SymmetryType.rot90)
+                {
+                    double size = Math.min(Math.abs(selectX2 - selectX1), Math.abs(selectY2 - selectY1));
+                    selectX2 = Math.signum(selectX2 - selectX1) * size + selectX1;
+                    selectY2 = Math.signum(selectY2 - selectY1) * size + selectY1;
+                }
+
+                if (prevSelectX2 != selectX2 || prevSelectY2 != selectY2)
+                    Drawing.drawing.playVibration("selectionChanged");
+            }
+
+            if (!left && selectHeld)
+            {
+                Drawing.drawing.playVibration("click");
+                selectHeld = false;
+
+                double lowX = Math.min(selectX1, selectX2);
+                double highX = Math.max(selectX1, selectX2);
+                double lowY = Math.min(selectY1, selectY2);
+                double highY = Math.max(selectY1, selectY2);
+
+                this.symmetryX1 = lowX;
+                this.symmetryX2 = highX;
+                this.symmetryY1 = lowY;
+                this.symmetryY2 = highY;
+            }
+        }
+        else
+        {
+            int x = (int) (mousePlaceable.posX / Game.tile_size);
+            int y = (int) (mousePlaceable.posY / Game.tile_size);
+
+            if (x >= 0 && x < Game.currentSizeX && y >= 0 && y < Game.currentSizeY)
+            {
+                if (selectedTiles[x][y] && (validLeft || validRight) && !(currentPlaceable == Placeable.playerTank && this.movePlayer && validLeft))
+                {
+                    double ox = mousePlaceable.posX;
+                    double oy = mousePlaceable.posY;
+
+                    ArrayList<EditorAction> actions = this.undoActions;
+                    this.undoActions = new ArrayList<>();
+
+                    for (int i = 0; i < selectedTiles.length; i++)
+                    {
+                        for (int j = 0; j < selectedTiles[i].length; j++)
+                        {
+                            if (selectedTiles[i][j])
+                            {
+                                mousePlaceable.posX = (i + 0.5) * Game.tile_size;
+                                mousePlaceable.posY = (j + 0.5) * Game.tile_size;
+
+                                handled = handlePlace(handled, left, right, validLeft, validRight, true);
+                            }
+                        }
+                    }
+
+                    if (!this.undoActions.isEmpty())
+                    {
+                        EditorAction a = new EditorAction.ActionGroup(this, this.undoActions);
+                        actions.add(a);
+                        Drawing.drawing.playVibration("click");
+                    }
+
+                    this.undoActions = actions;
+
+                    mousePlaceable.posX = ox;
+                    mousePlaceable.posY = oy;
+                }
+                else
+                    handled = handlePlace(handled, left, right, validLeft, validRight, false);
+            }
+        }
+
+        return handled;
+    }
+
+    public void shapeFromSelection(boolean[] handled, double lowX, double highX, double lowY, double highY)
+    {
+        Shape s = Shape.getShape(buildTool, lowX, highX, lowY, highY, selectX1 < selectX2, selectY1 < selectY2);
+
+        ArrayList<EditorAction> prevActions = this.undoActions;
+        this.undoActions = new ArrayList<>();
+
+        for (Shape.XY xy: s.xys)
+        {
+            mousePlaceable.posX = (xy.x + 0.5) * Game.tile_size;
+            mousePlaceable.posY = (xy.y + 0.5) * Game.tile_size;
+
+            handlePlace(handled, true, false, true, false, true, false);
+        }
+
+        prevActions.add(new EditorAction.ActionPaste(this, this.undoActions));
+        this.undoActions = prevActions;
+    }
+
+    public static class Shape
+    {
+        static int[] rectX = {0, 1, 0, 1, 0, 0, 1, 1};
+        static int[] rectY = {0, 0, 1, 1, 0, 1, 0, 1};
+
+        public static class XY
+        {
+            public int x;
+            public int y;
+            public XY(int x, int y)
+            {
+                this.x = x;
+                this.y = y;
+            }
+
+            @Override
+            public boolean equals(Object other)
+            {
+                return (other instanceof XY) && ((XY) other).x == this.x && ((XY) other).y == this.y;
+            }
+
+            @Override
+            public int hashCode()
+            {
+                return Objects.hash(x, y);
+            }
+        }
+
+        public final HashSet<XY> xys = new HashSet<>();
+
+        protected Shape()
+        {
+        }
+
+        public int size()
+        {
+            return xys.size();
+        }
+
+        public static Shape getShape(BuildTool tool, double lowX, double highX, double lowY, double highY, boolean xa, boolean ya)
+        {
+            Shape s = new Shape();
+
+            int lx = (int) (lowX / Game.tile_size);
+            int hx = (int) (highX / Game.tile_size);
+            int ly = (int) (lowY / Game.tile_size);
+            int hy = (int) (highY / Game.tile_size);
+            int width = hx - lx, length = hy - ly;
+            boolean direction = xa;
+            if (ya)
+                direction = !direction;
+
+            if (tool == BuildTool.rectangle || (tool == BuildTool.line && (width == 0 || length == 0)))
+            {
+                for (int i = 0; i < rectX.length; i += 2)
+                {
+                    for (int x = lx + width * rectX[i]; x <= lx + width * rectX[i + 1]; x++)
+                    {
+                        for (int y = ly + length * rectY[i]; y <= ly + length * rectY[i + 1]; y++)
+                        {
+                            s.xys.add(new XY(x, y));
+                        }
+                    }
+                }
+            }
+            else if (tool == BuildTool.circle)
+            {
+                lx++;
+                hx++;
+                ly++;
+                hy++;
+
+                for (double t = 0; t < Math.PI * 2; t += Math.PI / Math.max(width, length) / 2)
+                {
+                    int x = (int) (lx + Math.cos(t) * 0.5 * width + width / 2);
+                    int y = (int) (ly + Math.sin(t) * 0.5 * length + length / 2);
+                    if (x == hx) x--;
+                    if (y == hy) y--;
+
+                    s.xys.add(new XY(x, y));
+                }
+            }
+            else if (tool == BuildTool.line)
+            {
+                for (double x = 0; x <= width; x += 1. / length)
+                {
+                    int y = (int) ((double) length / width * (direction ? -1 : 1) * x + ly + (direction ? length : 0));
+                    s.xys.add(new XY( (int) x + lx, y));
+                }
+            }
+
+            return s;
+        }
+    }
+
+
+    public void newSelection(double lowX, double highX, double lowY, double highY)
+    {
+        ArrayList<Integer> px = new ArrayList<>();
+        ArrayList<Integer> py = new ArrayList<>();
+
+        for (double x = lowX; x <= highX; x += Game.tile_size)
+        {
+            for (double y = lowY; y <= highY; y += Game.tile_size)
+            {
+                if (selectedTiles[(int) (x / Game.tile_size)][(int) (y / Game.tile_size)] == selectInverted)
+                {
+                    px.add((int) (x / Game.tile_size));
+                    py.add((int) (y / Game.tile_size));
+                }
+
+                selectedTiles[(int) (x / Game.tile_size)][(int) (y / Game.tile_size)] = !selectInverted;
+            }
+        }
+
+        this.undoActions.add(new EditorAction.ActionSelectTiles(this, !selectInverted, px, py));
+
+        this.refreshSelection();
+    }
+
+    public void initialize()
+    {
+        if (!this.initialized)
+        {
+            this.initialized = true;
+            this.clickCooldown = 50;
+
+            this.setMousePlaceable();
+        }
+
+        selectSquareToggle.moveToBottom();
+        selectAddToggle.moveToBottom();
+        selectClear.moveToBottom();
+    }
+
+    public boolean[] handlePlace(boolean[] handled, boolean left, boolean right, boolean validLeft, boolean validRight, boolean batch, boolean paste)
+    {
+        ArrayList<Double> posX = new ArrayList<>();
+        ArrayList<Double> posY = new ArrayList<>();
+        ArrayList<Double> orientations = new ArrayList<>();
+
+        double originalX = mousePlaceable.posX;
+        double originalY = mousePlaceable.posY;
+        double originalOrientation = mousePlaceable instanceof Tank ? ((Tank) mousePlaceable).orientation : 0;
+
+        posX.add(mousePlaceable.posX);
+        posY.add(mousePlaceable.posY);
+        orientations.add(originalOrientation);
+
+        if (mousePlaceable.posX >= symmetryX1 && mousePlaceable.posX <= symmetryX2 && mousePlaceable.posY >= symmetryY1 && mousePlaceable.posY <= symmetryY2)
+            handleSymmetry(posX, posY, orientations);
+
+        for (int oi = 0; oi < orientations.size(); oi++)
+        {
+            mousePlaceable.posX = posX.get(oi);
+            mousePlaceable.posY = posY.get(oi);
+
+            if (mousePlaceable instanceof Tank)
+                ((Tank) mousePlaceable).orientation = orientations.get(oi);
+
+            if (mousePlaceable.posX > 0 && mousePlaceable.posY > 0 && mousePlaceable.posX < Game.tile_size * Game.currentSizeX && mousePlaceable.posY < Game.tile_size * Game.currentSizeY)
+            {
+                if (validLeft && currentMode == EditorMode.paste && !paste)
+                    return handlePaste(originalX, originalY, originalOrientation);
+
+                if ((currentMode == EditorMode.build && right) || (currentMode == EditorMode.erase && (left || right)))
+                    handleErase(handled, validLeft, validRight, batch);
+
+                if (currentMode != EditorMode.erase && clickCooldown <= 0 && (validLeft || (currentMode != EditorMode.paste && left && currentPlaceable == Placeable.obstacle && this.mousePlaceable.draggable)))
+                    handleBuild(handled, validRight, batch, paste);
+            }
+        }
+
+        return handled;
+    }
+
+    protected void handleBuild(boolean[] handled, boolean validRight, boolean batch, boolean paste)
+    {
+        double mx = mousePlaceable.posX;
+        double my = mousePlaceable.posY;
+
+        if (currentPlaceable == Placeable.obstacle)
+        {
+            mx = mousePlaceable.posX;
+            my = mousePlaceable.posY;
+        }
+
+
+        boolean skip = false;
+
+        if (!(mousePlaceable instanceof Obstacle && !((Obstacle) mousePlaceable).tankCollision))
+            skip = checkForMovable(mx, my);
+
+        if (skip) return;
+        skip = checkForObstacle(validRight, mx, my);
+
+        handled[0] = true;
+        handled[1] = true;
+
+        if (skip) return;
+
+        if (currentPlaceable == Placeable.enemyTank)
+            placeEnemyTank(batch, paste);
+        else if (currentPlaceable == Placeable.playerTank)
+            placePlayerTank(batch, paste);
+        else if (currentPlaceable == Placeable.obstacle)
+            placeObstacle(batch, paste);
+    }
+
+    protected boolean checkForObstacle(boolean validRight, double mx, double my)
+    {
+        Chunk.Tile t = Chunk.getTile(mx, my);
+        if (t == null)
+            return false;
+
+        Obstacle o = t.obstacle();
+
+        if (validRight)
+        {
+            this.undoActions.add(new EditorAction.ActionObstacle(o, false));
+            Game.removeObstacles.add(o);
+            return false;
+        }
+        else
+        {
+            return !t.canPlaceOn(mousePlaceable);
+        }
+    }
+
+    protected static boolean checkForMovable(double mx, double my)
+    {
+        return Movable.findMovable(mx, my) != null;
+    }
+
+    protected void placeObstacle(boolean batch, boolean paste)
+    {
+        Obstacle o = !paste ? Game.registryObstacle.getEntry(obstacleNum)
+            .getObstacle(mousePlaceable.posX / Game.tile_size - 0.5, mousePlaceable.posY / Game.tile_size - 0.5)
+            : (Obstacle) mousePlaceable;
+        o.setMetadata(mousePlaceable.getMetadata());
+
+        if (o instanceof ObstacleStackable)
+        {
+            boolean evenTile = ((int) (o.posX / Game.tile_size) + (int) (o.posY / Game.tile_size)) % 2 == 0;
+            if (this.stagger && evenTile == !oddStagger && !paste)
+                ((ObstacleStackable) o).stackHeight -= 0.5;
+            o.refreshMetadata();
+        }
+
+        this.undoActions.add(new EditorAction.ActionObstacle(o, true));
+        Game.addObstacle(o);
+
+        if (!batch)
+            Drawing.drawing.playVibration("click");
+    }
+
+    protected void placePlayerTank(boolean batch, boolean paste)
+    {
+        ArrayList<TankSpawnMarker> spawnsClone = (ArrayList<TankSpawnMarker>) spawns.clone();
+        if (this.movePlayer && !paste)
+        {
+            for (Movable m : Game.movables)
+            {
+                if (m instanceof TankSpawnMarker)
+                    Game.removeMovables.add(m);
+            }
+
+            this.spawns.clear();
+        }
+
+        TankSpawnMarker t = new TankSpawnMarker("player", mousePlaceable.posX, mousePlaceable.posY, 0);
+        t.setMetadata(mousePlaceable.getMetadata());
+        t.angle = t.orientation;
+
+        this.spawns.add(t);
+
+        if (this.movePlayer && !paste)
+            this.undoActions.add(new EditorAction.ActionMovePlayer(this, spawnsClone, t));
+        else
+            this.undoActions.add(new EditorAction.ActionPlayerSpawn(this, t, true));
+
+        Game.addMovable(t);
+
+        if (!batch)
+            Drawing.drawing.playVibration("click");
+
+        if (this.movePlayer)
+            t.drawAge = 50;
+    }
+
+    protected void placeEnemyTank(boolean batch, boolean paste)
+    {
+        Tank t;
+
+        if (paste)
+            t = (Tank) mousePlaceable;
+        else
+        {
+            if (tankNum < Game.registryTank.tankEntries.size())
+                t = Game.registryTank.getEntry(tankNum).getTank(mousePlaceable.posX, mousePlaceable.posY, ((Tank) mousePlaceable).angle);
+            else
+                t = ((TankAIControlled) mousePlaceable).instantiate(((TankAIControlled) mousePlaceable).name, mousePlaceable.posX, mousePlaceable.posY, ((TankAIControlled) mousePlaceable).angle);
+        }
+
+        t.setMetadata(mousePlaceable.getMetadata());
+
+        this.undoActions.add(new EditorAction.ActionTank(t, true));
+        Game.addMovable(t);
+
+        if (!batch)
+            Drawing.drawing.playVibration("click");
+    }
+
+    protected void handleErase(boolean[] handled, boolean validLeft, boolean validRight, boolean batch)
+    {
+        boolean skip = false;
+
+        if (validRight || (currentMode == EditorMode.erase && validLeft))
+        {
+            for (Movable m : Game.movables)
+            {
+                if (m.posX == mousePlaceable.posX && m.posY == mousePlaceable.posY && m instanceof Tank && !(this.spawns.contains(m) && this.spawns.size() == 1))
+                {
+                    skip = true;
+
+                    if (m instanceof TankSpawnMarker)
+                    {
+                        this.spawns.remove(m);
+                        this.undoActions.add(new EditorAction.ActionPlayerSpawn(this, (TankSpawnMarker) m, false));
+                    }
+                    else
+                        this.undoActions.add(new EditorAction.ActionTank((Tank) m, false));
+
+                    Game.removeMovables.add(m);
+
+                    if (!batch)
+                        createEraseEffect(m);
+
+                    break;
+                }
+            }
+        }
+
+        for (int i = 0; i < Game.obstacles.size(); i++)
+        {
+            Obstacle m = Game.obstacles.get(i);
+            if (m.posX == mousePlaceable.posX && m.posY == mousePlaceable.posY)
+            {
+                skip = true;
+                this.undoActions.add(new EditorAction.ActionObstacle(m, false));
+                Game.removeObstacles.add(m);
+
+                if (!batch)
+                    Drawing.drawing.playVibration("click");
+
+                break;
+            }
+        }
+
+        if (!batch && !Game.game.window.touchscreen && !skip && validRight)
+        {
+            int add = Game.game.window.shift ? -1 : 1;
+
+            MetadataSelector s = mousePlaceable.getSecondaryMetadataProperty();
+            if (s != null)
+                s.changeMetadata(this, mousePlaceable, add);
+        }
+
+        if (Game.game.window.touchscreen)
+            handled[0] = true;
+
+        handled[1] = true;
+    }
+
+    protected static void createEraseEffect(Movable m)
+    {
+        Drawing.drawing.playVibration("click");
+
+        for (int z = 0; z < 100 * Game.effectMultiplier; z++)
+        {
+            Effect e = Effect.createNewEffect(m.posX, m.posY, ((Tank) m).size / 2, Effect.EffectType.piece);
+            e.setColorsFromTank((Tank) m);
+
+            if (Game.enable3d)
+                e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * 2);
+            else
+                e.setPolarMotion(Math.random() * 2 * Math.PI, Math.random() * 2);
+
+            e.maxAge /= 2;
+            Game.effects.add(e);
+        }
+    }
+
+    protected boolean[] handlePaste(double originalX, double originalY, double originalOrientation)
+    {
+        paste();
+
+        mousePlaceable.posX = originalX;
+        mousePlaceable.posY = originalY;
+
+        if (mousePlaceable instanceof Tank)
+            ((Tank) mousePlaceable).orientation = originalOrientation;
+
+        return new boolean[]{true, true};
+    }
+
+    protected void handleSymmetry(ArrayList<Double> posX, ArrayList<Double> posY, ArrayList<Double> orientations)
+    {
+        if (symmetryType == SymmetryType.flipHorizontal || symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flip8)
+        {
+            for (int i = 0; i < posX.size(); i++)
+            {
+                posY.add(symmetryY1 + (symmetryY2 - posY.get(i)));
+                posX.add(posX.get(i));
+
+                if (orientations.get(i) == 1 || orientations.get(i) == 3)
+                    orientations.add((orientations.get(i) + 2) % 4);
+                else
+                    orientations.add(orientations.get(i));
+            }
+        }
+
+        if (symmetryType == SymmetryType.flipVertical || symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flip8)
+        {
+            for (int i = 0; i < posX.size(); i++)
+            {
+                posX.add(symmetryX1 + (symmetryX2 - posX.get(i)));
+                posY.add(posY.get(i));
+
+                if (orientations.get(i) == 0 || orientations.get(i) == 2)
+                    orientations.add((orientations.get(i) + 2) % 4);
+                else
+                    orientations.add(orientations.get(i));
+            }
+        }
+    }
+
+    public boolean[] handlePlace(boolean[] handled, boolean left, boolean right, boolean validLeft, boolean validRight, boolean batch)
+    {
+        return handlePlace(handled, left, right, validLeft, validRight, batch, false);
+    }
+
+    public void save()
+    {
+        this.save(this.name);
+    }
+
+    public void save(String levelName)
+    {
+        StringBuilder level = new StringBuilder("{");
+
+        if (!this.level.editable)
+            level.append("*");
+
+        level.append(this.level.sizeX).append(",").append(this.level.sizeY).append(",").append(this.level.color.red).append(",").append(this.level.color.green).append(",").append(this.level.color.blue).append(",").append(this.level.colorVar.red).append(",").append(this.level.colorVar.green).append(",").append(this.level.colorVar.blue)
+            .append(",").append((int) (this.level.timer / 100)).append(",").append((int) Math.round(this.level.light * 100)).append(",").append((int) Math.round(this.level.shadow * 100)).append("|");
+
+        ArrayList<Obstacle> unmarked = (ArrayList<Obstacle>) Game.obstacles.clone();
+        String[][][] obstacles = new String[Game.registryObstacle.obstacleEntries.size()][this.level.sizeX][this.level.sizeY];
+
+        for (int h = 0; h < Game.registryObstacle.obstacleEntries.size(); h++)
+        {
+            for (int i = 0; i < Game.obstacles.size(); i++)
+            {
+                Obstacle o = Game.obstacles.get(i);
+                int x = (int) (o.posX / Game.tile_size);
+                int y = (int) (o.posY / Game.tile_size);
+
+                if (x < obstacles[h].length && x >= 0 && y < obstacles[h][0].length && y >= 0 && o.name.equals(Game.registryObstacle.getEntry(h).name))
+                {
+                    obstacles[h][x][y] = o.getMetadata();
+
+                    unmarked.remove(o);
+                }
+            }
+
+            //compression
+            for (int i = 0; i < this.level.sizeX; i++)
+            {
+                for (int j = 0; j < this.level.sizeY; j++)
+                {
+                    if (obstacles[h][i][j] != null)
+                    {
+                        String stack = obstacles[h][i][j];
+
+                        int xLength = 0;
+
+                        while (true)
+                        {
+                            xLength += 1;
+
+                            if (i + xLength >= obstacles[h].length)
+                                break;
+                            else if (!Objects.equals(obstacles[h][i + xLength][j], stack))
+                                break;
+                        }
+
+
+                        int yLength = 0;
+
+                        while (true)
+                        {
+                            yLength += 1;
+
+                            if (j + yLength >= obstacles[h][0].length)
+                                break;
+                            else if (!Objects.equals(obstacles[h][i][j + yLength], stack))
+                                break;
+                        }
+
+                        String name = "";
+                        String obsName = Game.registryObstacle.obstacleEntries.get(h).name;
+
+                        if (!obsName.equals("normal") || !stack.equals("1.0"))
+                            name = "-" + obsName;
+
+                        if (xLength >= yLength)
+                        {
+                            if (xLength == 1)
+                                level.append(i).append("-").append(j).append(name);
+                            else
+                                level.append(i).append("...").append(i + xLength - 1).append("-").append(j).append(name);
+
+                            if (!stack.isEmpty())
+                                level.append("-").append(stack);
+
+                            level.append(",");
+
+                            for (int z = 0; z < xLength; z++)
+                            {
+                                obstacles[h][i + z][j] = null;
+                            }
+                        }
+                        else
+                        {
+                            level.append(i).append("-").append(j).append("...").append(j + yLength - 1).append(name);
+
+                            if (!stack.isEmpty())
+                                level.append("-").append(stack);
+
+                            level.append(",");
+
+                            for (int z = 0; z < yLength; z++)
+                            {
+                                obstacles[h][i][j + z] = null;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (Obstacle obstacle : unmarked)
+        {
+            level.append((int) (obstacle.posX / Game.tile_size)).append("-").append((int) (obstacle.posY / Game.tile_size));
+            level.append("-").append(obstacle.name);
+
+            if (obstacle instanceof ObstacleUnknown && ((ObstacleUnknown) obstacle).metadata != null)
+                level.append("-").append(((ObstacleUnknown) obstacle).metadata);
+            else
+            {
+                String meta = obstacle.getMetadata();
+                if (!meta.isEmpty())
+                    level.append("-").append(meta);
+            }
+
+
+            level.append(",");
+        }
+
+        if (level.charAt(level.length() - 1) == ',')
+        {
+            level = new StringBuilder(level.substring(0, level.length() - 1));
+        }
+
+        level.append("|");
+
+        for (int i = 0; i < Game.movables.size(); i++)
+        {
+            if (Game.movables.get(i) instanceof Tank)
+            {
+                Tank t = (Tank) Game.movables.get(i);
+                int x = (int) (t.posX / Game.tile_size);
+                int y = (int) (t.posY / Game.tile_size);
+                int angle = (int) (t.angle * 2 / Math.PI);
+
+                level.append(x).append("-").append(y).append("-").append(t.name).append("-").append(angle);
+
+                if (t.team != null)
+                    level.append("-").append(t.team.name);
+
+                level.append(",");
+            }
+        }
+
+        if (Game.movables.isEmpty())
+            level.append("|");
+
+        level = new StringBuilder(level.substring(0, level.length() - 1));
+
+        level.append("|");
+
+        for (Team t : teams)
+        {
+            level.append(t.name).append("-").append(t.friendlyFire);
+            if (t.enableColor)
+                level.append("-").append(t.teamColor.red).append("-").append(t.teamColor.green).append("-").append(t.teamColor.blue);
+
+            level.append(",");
+        }
+
+        level = new StringBuilder(level.substring(0, level.length() - 1));
+
+        level.append("}");
+
+        if (this.level.startingCoins > 0)
+            level.append("\ncoins\n").append(this.level.startingCoins);
+
+        if (!this.level.shop.isEmpty())
+        {
+            level.append("\nshop");
+
+            for (Item.ShopItem i : this.level.shop)
+                level.append("\n").append(i.toString());
+        }
+
+        if (!this.level.startingItems.isEmpty())
+        {
+            level.append("\nitems");
+
+            for (Item.ItemStack<?> i : this.level.startingItems)
+                level.append("\n").append(i.toString());
+        }
+
+        if (!this.level.customTanks.isEmpty())
+        {
+            level.append("\ntanks");
+
+            for (Tank t : this.level.customTanks)
+                level.append("\n").append(t.toString());
+        }
+
+        if (!this.level.playerBuilds.isEmpty() && !(this.level.playerBuilds.size() == 1 && Serializer.equivalent(this.level.playerBuilds.get(0), new TankPlayer.ShopTankBuild())))
+        {
+            level.append("\nbuilds");
+
+            for (Tank t : this.level.playerBuilds)
+                level.append("\n").append(t.toString());
+        }
+
+        Game.currentLevelString = level.toString();
+
+        BaseFile file = Game.game.fileManager.getFile(Game.homedir + Game.levelDir + "/" + levelName);
+        if (file.exists())
+        {
+            if (!this.level.editable)
+            {
+                return;
+            }
+//            else
+//            {
+//                try
+//                {
+//                    Level oldLevel = new Level(new String(Files.readAllBytes(Paths.get(file.path))));
+//                    if (oldLevel.stripFormatting().equals(Game.currentLevelString))
+//                        return;
+//                }
+//                catch (IOException e)
+//                {
+//                    Game.exitToCrash(e);
+//                }
+//            }
+        }
+
+        try
+        {
+            file.create();
+
+            file.startWriting();
+            file.println(level.toString());
+            file.stopWriting();
+        }
+        catch (IOException e)
+        {
+            Game.exitToCrash(e);
+        }
+    }
+
+    public void paste()
+    {
+        Drawing.drawing.playVibration("click");
+
+        ArrayList<EditorAction> actions = this.undoActions;
+        this.undoActions = new ArrayList<>();
+
+        boolean[] handled = new boolean[2];
+
+        GameObject prevMousePlaceable = mousePlaceable;
+        Placeable placeable = currentPlaceable;
+
+        double mx = prevMousePlaceable.posX;
+        double my = prevMousePlaceable.posY;
+
+        int prevSize = Game.movables.size() + Game.obstacles.size();
+
+        for (Obstacle o : clipboard.obstacles)
+        {
+            currentPlaceable = Placeable.obstacle;
+
+            try
+            {
+                Obstacle n = o.getClass().getConstructor(String.class, double.class, double.class).newInstance(o.name, (o.posX + mx) / Game.tile_size - 0.5, (o.posY + my) / Game.tile_size - 0.5);
+                n.setMetadata(o.getMetadata());
+                mousePlaceable = n;
+
+                handlePlace(handled, true, false, true, false, true, true);
+            }
+            catch (Exception e)
+            {
+                Game.exitToCrash(e);
+            }
+        }
+
+        mousePlaceable = prevMousePlaceable;        // this line is important! debugging this took at least 1.5 hrs
+
+        for (Tank t : clipboard.tanks)
+        {
+            currentPlaceable = Placeable.enemyTank;
+
+            try
+            {
+                Tank n;
+
+                if (t.getClass().equals(TankAIControlled.class))
+                {
+                    n = new TankAIControlled(t.name, t.posX + mx, t.posY + my, t.size, t.color.red, t.color.green, t.color.blue, t.angle, ((TankAIControlled) t).shootAIType);
+                    ((TankAIControlled) t).cloneProperties((TankAIControlled) n);
+                }
+                else
+                    n = t.getClass().getConstructor(String.class, double.class, double.class, double.class).newInstance(t.name, t.posX + mx, t.posY + my, t.angle);
+
+                n.team = t.team;
+                n.destroy = t.destroy;
+                mousePlaceable = n;
+
+                if (n instanceof TankSpawnMarker || n instanceof TankPlayer)
+                    currentPlaceable = Placeable.playerTank;
+
+                handlePlace(handled, true, false, true, false, true, true);
+            }
+            catch (Exception e)
+            {
+                Game.exitToCrash(e);
+            }
+        }
+
+        prevMousePlaceable.posX = mx;
+        prevMousePlaceable.posY = my;
+
+        currentPlaceable = placeable;
+        mousePlaceable = prevMousePlaceable;
+
+        ArrayList<EditorAction> tempActions = this.undoActions;
+        this.undoActions = actions;
+
+        if (Game.movables.size() + Game.obstacles.size() > prevSize)
+            this.undoActions.add(new EditorAction.ActionPaste(this, tempActions));
+    }
+
+    @Override
+    public void draw()
+    {
+        Game.game.window.orthographic = Game.orthographicView != invertOrthographic;
+
+        if (Level.isDark())
+            this.fontBrightness = 255;
+        else
+            this.fontBrightness = 0;
+
+//		windowTitle = (allowClose ? "" : "*");
+
+        if (Panel.panel.continuation == null)
+        {
+            Drawing.drawing.setColor(174, 92, 16);
+
+            double mul = 1;
+            if (Game.angledView)
+                mul = 2;
+
+            Drawing.drawing.fillShadedInterfaceRect(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2,
+                mul * Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale, mul * Game.game.window.absoluteHeight / Drawing.drawing.interfaceScale);
+        }
+
+        this.drawDefaultBackground();
+
+        for (Movable m : Game.movables)
+            drawables[m.drawLevel].add(m);
+
+        for (Obstacle o : Game.obstacles)
+        {
+            if (!o.batchDraw || !Game.enable3d)
+                drawables[o.drawLevel].add(o);
+        }
+
+        for (Effect e : Game.effects)
+            drawables[7].add(e);
+
+        for (int i = 0; i < this.drawables.length; i++)
+        {
+            if (i == 5 && Game.enable3d)
+            {
+                Drawing drawing = Drawing.drawing;
+                Drawing.drawing.setColor(174, 92, 16);
+                Drawing.drawing.fillForcedBox(drawing.sizeX / 2, -Game.tile_size / 2, 0, drawing.sizeX + Game.tile_size * 2, Game.tile_size, Obstacle.draw_size, (byte) 0);
+                Drawing.drawing.fillForcedBox(drawing.sizeX / 2, Drawing.drawing.sizeY + Game.tile_size / 2, 0, drawing.sizeX + Game.tile_size * 2, Game.tile_size, Obstacle.draw_size, (byte) 0);
+                Drawing.drawing.fillForcedBox(-Game.tile_size / 2, drawing.sizeY / 2, 0, Game.tile_size, drawing.sizeY, Obstacle.draw_size, (byte) 0);
+                Drawing.drawing.fillForcedBox(drawing.sizeX + Game.tile_size / 2, drawing.sizeY / 2, 0, Game.tile_size, drawing.sizeY, Obstacle.draw_size, (byte) 0);
+            }
+
+            for (IDrawable d : this.drawables[i])
+            {
+                d.draw();
+
+                if (d instanceof Movable)
+                    ((Movable) d).drawTeam();
+            }
+
+            if (Game.glowEnabled)
+            {
+                for (int j = 0; j < this.drawables[i].size(); j++)
+                {
+                    IDrawable d = this.drawables[i].get(j);
+
+                    if (d instanceof IDrawableWithGlow && ((IDrawableWithGlow) d).isGlowEnabled())
+                        ((IDrawableWithGlow) d).drawGlow();
+                }
+            }
+
+            drawables[i].clear();
+        }
+
+        if (Level.isDark())
+            Drawing.drawing.setColor(255, 255, 255, 64);
+        else
+            Drawing.drawing.setColor(0, 0, 0, 64);
+
+        Drawing.drawing.drawImage("level_center.png", Drawing.drawing.sizeX / 2, Drawing.drawing.sizeY / 2, 50, 50);
+
+
+        if (!paused && !Game.game.window.touchscreen)
+        {
+            if (currentMode == EditorMode.erase)
+            {
+                Drawing.drawing.setColor(255, 0, 0, 64, 0.3);
+
+                if (Game.enable3d)
+                {
+                    if (hoverObstacle == null)
+                        Drawing.drawing.fillBox(mousePlaceable.posX, mousePlaceable.posY, 0, Game.tile_size, Game.tile_size, Game.tile_size, (byte) 64);
+                    else
+                        hoverObstacle.draw3dOutline(255, 0, 0, 64);
+                }
+                else
+                    Drawing.drawing.fillRect(mousePlaceable.posX, mousePlaceable.posY, Game.tile_size, Game.tile_size);
+            }
+            else if (currentMode == EditorMode.paste)
+            {
+                Drawing.drawing.setColor(255, 255, 255, 127, 0.3);
+                Drawing.drawing.drawImage("icons/paste.png", mousePlaceable.posX, mousePlaceable.posY, Game.tile_size, Game.tile_size);
+
+                for (Obstacle o : clipboard.obstacles)
+                {
+                    Drawing.drawing.setColor(o.colorR, o.colorG, o.colorB, 64, 0.5);
+
+                    Drawing.drawing.fillRect(o.posX + mousePlaceable.posX, o.posY + mousePlaceable.posY, /*0,*/ Game.tile_size, Game.tile_size/*, ((Obstacle) o).stackHeight * Game.tile_size, (byte) 64*/);
+                }
+
+                for (Tank t : clipboard.tanks)
+                    t.drawOutlineAt(t.posX + mousePlaceable.posX, t.posY + mousePlaceable.posY);
+            }
+            else if (currentMode == EditorMode.picker)
+            {
+                Drawing.drawing.setColor(0, 0, 0, 127);
+                Drawing.drawing.drawRect(mousePlaceable.posX, mousePlaceable.posY, Game.tile_size, Game.tile_size, 10, 0);
+                Drawing.drawing.setColor(255, 255, 255, 255, 1);
+                Drawing.drawing.drawImage("icons/eyedropper.png", mousePlaceable.posX - Game.tile_size / 2, mousePlaceable.posY - Game.tile_size / 2, Game.tile_size, Game.tile_size);
+            }
+            else if ((currentPlaceable == Placeable.enemyTank || currentPlaceable == Placeable.playerTank) && currentMode == EditorMode.build)
+            {
+                ((Tank) mousePlaceable).drawOutline();
+                ((Tank) mousePlaceable).drawTeam();
+
+                if (currentPlaceable == Placeable.playerTank && !this.movePlayer)
+                {
+                    Drawing.drawing.setColor(0, 200, 255, 127);
+
+                    if (!Game.enable3d)
+                        Drawing.drawing.drawImage("emblems/player_spawn.png", mousePlaceable.posX, mousePlaceable.posY, ((Tank) mousePlaceable).size * 0.7, ((Tank) mousePlaceable).size * 0.7);
+                    else
+                        Drawing.drawing.drawImage("emblems/player_spawn.png", mousePlaceable.posX, mousePlaceable.posY, Game.tile_size * 0.82, ((Tank) mousePlaceable).size * 0.5, ((Tank) mousePlaceable).size * 0.5);
+                }
+            }
+            else if (currentPlaceable == Placeable.obstacle && currentMode == EditorMode.build)
+            {
+                int x = (int) (mousePlaceable.posX / Game.tile_size);
+                int y = (int) (mousePlaceable.posY / Game.tile_size);
+
+                if (x >= 0 && x < Game.currentSizeX && y >= 0 && y < Game.currentSizeY /*&&
+						(Game.getObstacle(x, y) == null || (Game.getSurfaceObstacle(x, y) == null &&
+								Game.getObstacle(x, y).isSurfaceTile != mousePlaceable.isSurfaceTile && !mousePlaceable.tankCollision))*/)
+                {
+                    Obstacle mouseObstacle = (Obstacle) mousePlaceable;
+                    if (Game.enable3d)
+                    {
+                        if (Game.isOrdered(-1, x, Game.currentSizeX) && Game.isOrdered(-1, y, Game.currentSizeY) /*&&
+								(Game.getObstacle(x, y) == null || !Game.isOrdered(Game.getObstacle(x, y).startHeight, mousePlaceable.stackHeight + mousePlaceableStartHeight, Game.getObstacle(x, y).stackHeight))*/)
+                            mouseObstacle.draw3dOutline(mouseObstacle.colorR, mouseObstacle.colorG, mouseObstacle.colorB, 100);
+                    }
+
+                    mouseObstacle.drawOutline();
+
+                    if (mouseObstacle.getPrimaryMetadataProperty() != null)
+                    {
+                        Drawing.drawing.setFontSize(16);
+                        Drawing.drawing.setColor(mouseObstacle.colorR / 2, mouseObstacle.colorG / 2, mouseObstacle.colorB / 2, 255);
+                        Drawing.drawing.drawText(mousePlaceable.posX, mousePlaceable.posY, mouseObstacle.getPrimaryMetadataProperty().getMetadataDisplayString(mousePlaceable));
+                    }
+                }
+            }
+        }
+
+        double extra = Math.sin(System.currentTimeMillis() * Math.PI / 1000.0) * 25;
+        Drawing.drawing.setColor(230 + extra, 230 + extra, 230 + extra, 128);
+
+        if (selectedTiles != null)
+        {
+            for (int i = 0; i < selectedTiles.length; i++)
+            {
+                for (int j = 0; j < selectedTiles[i].length; j++)
+                {
+                    if (selectedTiles[i][j])
+                        Drawing.drawing.fillRect((i + 0.5) * Game.tile_size, (j + 0.5) * Game.tile_size, Game.tile_size, Game.tile_size);
+                }
+            }
+        }
+
+        if (currentMode == EditorMode.camera && !paused)
+        {
+            Drawing.drawing.setColor(0, 0, 0, 127);
+
+            Drawing.drawing.drawPopup(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2, 500 * objWidth / 350, 150 * objHeight / 40);
+
+            Drawing.drawing.setColor(255, 255, 255);
+
+            Drawing.drawing.setInterfaceFontSize(this.textSize);
+            Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - this.objYSpace / 2, "Drag to pan");
+
+            if (Game.game.window.touchscreen)
+            {
+                Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - 0, "Pinch to zoom");
+                recenter.draw();
 //				if (panDown)
 //				{
 //					Drawing.drawing.setColor(255, 255, 255);
@@ -2247,922 +2257,642 @@ public class ScreenLevelEditor extends Screen implements ILevelPreviewScreen
 //					Drawing.drawing.fillOval(this.zoomCurrentX, this.zoomCurrentY, 40, 40);
 //					Drawing.drawing.drawInterfaceText(100, 300, (int) this.zoomCurrentX + " " + (int) this.zoomCurrentY);
 //				}
-			}
-			else
-			{
-				Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - 0, "Scroll or press %s or %s to zoom", Game.game.input.editorZoomIn.getInputs(), Game.game.input.editorZoomOut.getInputs());
-				Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 + this.objYSpace / 2, "Press %s to re-center", Game.game.input.editorRevertCamera.getInputs());
-			}
-		}
-
-		if ((selectMode || symmetrySelectMode) && !changeCameraMode && !pasteMode && !this.paused)
-		{
-			if (!selectInverted)
-				Drawing.drawing.setColor(255, 255, 255, 127);
-			else
-				Drawing.drawing.setColor(0, 0, 0, 127);
-
-			if (!selectHeld)
-			{
-				if (!Game.game.window.touchscreen)
-					Drawing.drawing.fillRect(mouseObstacle.posX, mouseObstacle.posY, Game.tile_size, Game.tile_size);
-			}
-			else
-			{
-				double lowX = Math.min(selectX1, selectX2);
-				double highX = Math.max(selectX1, selectX2);
-				double lowY = Math.min(selectY1, selectY2);
-				double highY = Math.max(selectY1, selectY2);
-
-				for (double x = lowX; x <= highX; x += Game.tile_size)
-				{
-					for (double y = lowY; y <= highY; y += Game.tile_size)
-					{
-						Drawing.drawing.fillRect(x, y, Game.tile_size, Game.tile_size);
-					}
-				}
-
-				Drawing.drawing.setColor(255, 255, 255);
-
-				if (symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flipHorizontal || symmetryType == SymmetryType.rot180 || symmetryType == SymmetryType.rot90 || symmetryType == SymmetryType.flip8)
-					Drawing.drawing.fillRect((selectX2 + selectX1) / 2, (selectY2 + selectY1) / 2, (selectX2 - selectX1), 10);
-
-				if (symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flipVertical || symmetryType == SymmetryType.rot90 || symmetryType == SymmetryType.flip8)
-					Drawing.drawing.fillRect((selectX2 + selectX1) / 2, (selectY2 + selectY1) / 2, 10, (selectX2 - selectX1));
-			}
-		}
-
-		if (Game.screen instanceof IOverlayScreen || this.paused)
-		{
-			Drawing.drawing.setColor(127, 178, 228, 64);
-			//Drawing.drawing.setColor(0, 0, 0, 127);
-			Game.game.window.shapeRenderer.fillRect(0, 0, Game.game.window.absoluteWidth + 1, Game.game.window.absoluteHeight + 1);
-		}
-
-		if (!paused && showControls)
-		{
-			pause.image = "icons/pause.png";
-			pause.imageSizeX = 40 * controlsSizeMultiplier;
-			pause.imageSizeY = 40 * controlsSizeMultiplier;
-
-			menu.image = "icons/menu.png";
-			menu.imageSizeX = 50 * controlsSizeMultiplier;
-			menu.imageSizeY = 50 * controlsSizeMultiplier;
-
-			playControl.image = "icons/play.png";
-			playControl.imageSizeX = 30 * controlsSizeMultiplier;
-			playControl.imageSizeY = 30 * controlsSizeMultiplier;
-
-			place.image = "icons/pencil.png";
-			place.imageSizeX = 40 * controlsSizeMultiplier;
-			place.imageSizeY = 40 * controlsSizeMultiplier;
-
-			erase.image = "icons/eraser.png";
-			erase.imageSizeX = 40 * controlsSizeMultiplier;
-			erase.imageSizeY = 40 * controlsSizeMultiplier;
-
-			panZoom.image = "icons/zoom_pan.png";
-			panZoom.imageSizeX = 40 * controlsSizeMultiplier;
-			panZoom.imageSizeY = 40 * controlsSizeMultiplier;
-
-			select.image = "icons/select.png";
-			select.imageSizeX = 40 * controlsSizeMultiplier;
-			select.imageSizeY = 40 * controlsSizeMultiplier;
-
-			undo.image = "icons/undo.png";
-			undo.imageSizeX = 40 * controlsSizeMultiplier;
-			undo.imageSizeY = 40 * controlsSizeMultiplier;
-
-			redo.image = "icons/redo.png";
-			redo.imageSizeX = 40 * controlsSizeMultiplier;
-			redo.imageSizeY = 40 * controlsSizeMultiplier;
-
-			selectClear.image = "icons/select_clear.png";
-			selectClear.imageSizeX = 40 * controlsSizeMultiplier;
-			selectClear.imageSizeY = 40 * controlsSizeMultiplier;
-
-			if (selectAdd)
-				selectAddToggle.image = "icons/select_add.png";
-			else
-				selectAddToggle.image = "icons/select_remove.png";
-
-			selectAddToggle.imageSizeX = 40 * controlsSizeMultiplier;
-			selectAddToggle.imageSizeY = 40 * controlsSizeMultiplier;
-
-			if (selectSquare)
-				selectSquareToggle.image = "icons/square_locked.png";
-			else
-				selectSquareToggle.image = "icons/square_unlocked.png";
-
-			selectSquareToggle.imageSizeX = 40 * controlsSizeMultiplier;
-			selectSquareToggle.imageSizeY = 40 * controlsSizeMultiplier;
-
-			heightShortcut.image = "icons/obstacle_height.png";
-			heightShortcut.imageSizeX = 50 * controlsSizeMultiplier;
-			heightShortcut.imageSizeY = 50 * controlsSizeMultiplier;
-
-			beatPatternShortcut.image = "icons/obstacle_beat.png";
-			beatPatternShortcut.imageSizeX = 50 * controlsSizeMultiplier;
-			beatPatternShortcut.imageSizeY = 50 * controlsSizeMultiplier;
-
-			groupShortcut.image = "icons/id.png";
-			groupShortcut.imageSizeX = 50 * controlsSizeMultiplier;
-			groupShortcut.imageSizeY = 50 * controlsSizeMultiplier;
-
-			rotateShortcut.image = "icons/rotate_tank.png";
-			rotateShortcut.imageSizeX = 50 * controlsSizeMultiplier;
-			rotateShortcut.imageSizeY = 50 * controlsSizeMultiplier;
-
-			teamShortcut.image = "icons/team.png";
-			teamShortcut.imageSizeX = 50 * controlsSizeMultiplier;
-			teamShortcut.imageSizeY = 50 * controlsSizeMultiplier;
-
-			copy.image = "icons/copy.png";
-			copy.imageSizeX = 50 * controlsSizeMultiplier;
-			copy.imageSizeY = 50 * controlsSizeMultiplier;
-
-			cut.image = "icons/cut.png";
-			cut.imageSizeX = 60 * controlsSizeMultiplier;
-			cut.imageSizeY = 60 * controlsSizeMultiplier;
-
-			paste.image = "icons/paste.png";
-			paste.imageSizeX = 50 * controlsSizeMultiplier;
-			paste.imageSizeY = 50 * controlsSizeMultiplier;
-
-			playControl.draw();
-			menu.draw();
-			pause.draw();
-
-			panZoom.draw();
-			select.draw();
-			erase.draw();
-			place.draw();
-
-			undo.draw();
-			redo.draw();
-
-			if (clipboard.size() > 0)
-				paste.draw();
-
-			if (selection)
-			{
-				selectClear.draw();
-				copy.draw();
-				cut.draw();
-			}
-
-			if (selectMode && !changeCameraMode && !pasteMode)
-			{
-				selectSquareToggle.draw();
-
-				if (selection)
-					selectAddToggle.draw();
-			}
-			else if (!eraseMode && !changeCameraMode && !pasteMode)
-			{
-				if (currentPlaceable == Placeable.obstacle && mouseObstacle.enableStacking)
-					heightShortcut.draw();
-
-				if (currentPlaceable == Placeable.obstacle && mouseObstacle.enableGroupID)
-				{
-					if (mouseObstacle instanceof ObstacleBeatBlock)
-						beatPatternShortcut.draw();
-					else
-						groupShortcut.draw();
-				}
-
-				if (currentPlaceable == Placeable.playerTank || currentPlaceable == Placeable.enemyTank)
-					rotateShortcut.draw();
-
-				if (currentPlaceable == Placeable.playerTank || currentPlaceable == Placeable.enemyTank)
-					teamShortcut.draw();
-			}
-		}
-	}
-
-	public void play()
-	{
-		this.save();
-		this.replaceSpawns();
-
-		if (Game.enable3d)
-			for (int i = 0; i < Game.obstacles.size(); i++)
-			{
-				Obstacle o = Game.obstacles.get(i);
-
-				if (o.replaceTiles)
-					o.postOverride();
-			}
-
-		Game.game.solidGrid = new boolean[Game.currentSizeX][Game.currentSizeY];
-		Game.game.unbreakableGrid = new boolean[Game.currentSizeX][Game.currentSizeY];
-
-		Game.currentLevel = new Level(Game.currentLevelString);
-		Game.currentLevel.timed = level.timer > 0;
-		Game.currentLevel.timer = level.timer;
-
-		for (Obstacle o: Game.obstacles)
-		{
-			int x = (int) (o.posX / Game.tile_size);
-			int y = (int) (o.posY / Game.tile_size);
-
-			if (o.bulletCollision && x >= 0 && x < Game.currentSizeX && y >= 0 && y < Game.currentSizeY)
-			{
-				Game.game.solidGrid[x][y] = true;
-
-				if (!o.shouldShootThrough)
-					Game.game.unbreakableGrid[x][y] = true;
-			}
-
-			if (o instanceof ObstacleBeatBlock)
-			{
-				Game.currentLevel.synchronizeMusic = true;
-				Game.currentLevel.beatBlocks |= (int) ((ObstacleBeatBlock) o).beatFrequency;
-			}
-		}
-
-		Game.resetNetworkIDs();
-		for (Movable m: Game.movables)
-		{
-			if (m instanceof Tank)
-				((Tank) m).registerNetworkID();
-		}
-
-		Game.screen = new ScreenGame(this.name);
-		Game.player.hotbar.coins = this.level.startingCoins;
-	}
-
-	public void replaceSpawns()
-	{
-		int playerCount = 1;
-		if (ScreenPartyHost.isServer && ScreenPartyHost.server != null)
-			playerCount += ScreenPartyHost.server.connections.size();
-
-		ArrayList<Integer> availablePlayerSpawns = new ArrayList<>();
-		ArrayList<INetworkEvent> playerEvents = new ArrayList<>();
-
-		for (int i = 0; i < playerCount; i++)
-		{
-			if (availablePlayerSpawns.size() == 0)
-			{
-				for (int j = 0; j < this.spawns.size(); j++)
-				{
-					availablePlayerSpawns.add(j);
-				}
-			}
-
-			int spawn = availablePlayerSpawns.remove((int) (Math.random() * availablePlayerSpawns.size()));
-
-			double x = this.spawns.get(spawn).posX;
-			double y = this.spawns.get(spawn).posY;
-			double angle = this.spawns.get(spawn).angle;
-			Team team = this.spawns.get(spawn).team;
-
-			if (ScreenPartyHost.isServer)
-			{
-				Game.addPlayerTank(Game.players.get(i), x, y, angle, team);
-			}
-			else if (!ScreenPartyLobby.isClient)
-			{
-				TankPlayer tank = new TankPlayer(x, y, angle);
-
-				if (spawns.size() <= 1)
-					tank.drawAge = Game.tile_size;
-
-				Game.playerTank = tank;
-				tank.team = team;
-				Game.movables.add(tank);
-			}
-		}
-
-		for (INetworkEvent e: playerEvents)
-		{
-			e.execute();
-		}
-
-		for (int i = 0; i < Game.movables.size(); i++)
-		{
-			Movable m = Game.movables.get(i);
-
-			if (m instanceof TankSpawnMarker)
-				Game.removeMovables.add(m);
-		}
-	}
-
-	public void clearSelection()
-	{
-		selection = false;
-
-		ArrayList<Integer> x = new ArrayList<>();
-		ArrayList<Integer> y = new ArrayList<>();
-
-		for (int i = 0; i < selectedTiles.length; i++)
-		{
-			for (int j = 0; j < selectedTiles[i].length; j++)
-			{
-				if (selectedTiles[i][j])
-				{
-					x.add(i);
-					y.add(j);
-				}
-
-				selectedTiles[i][j] = false;
-			}
-		}
-
-		this.actions.add(new Action.ActionSelectTiles(this, false, x, y));
-
-	}
-
-	public void refreshSelection()
-	{
-		selection = false;
-
-		for (int x = 0; x < Game.currentSizeX; x++)
-		{
-			for (int y = 0; y < Game.currentSizeY; y++)
-			{
-				if (selectedTiles[x][y])
-				{
-					selection = true;
-					break;
-				}
-			}
-		}
-	}
-
-	public void copy(boolean cut)
-	{
-		double smallestX = Double.MAX_VALUE;
-		double smallestY = Double.MAX_VALUE;
-
-		ArrayList<Tank> tanks = new ArrayList<>();
-		ArrayList<Obstacle> obstacles = new ArrayList<>();
-
-		this.clipboard = new ArrayList<>();
-		for (int i = 0; i < this.level.sizeX; i++)
-		{
-			for (int j = 0; j < this.level.sizeY; j++)
-			{
-				if (this.selectedTiles[i][j])
-				{
-					if (i < smallestX)
-						smallestX = i;
-
-					if (j < smallestY)
-						smallestY = j;
-				}
-			}
-		}
-
-		for (Obstacle o : Game.obstacles)
-		{
-			int x = (int) ((o.posX - 25) / 50);
-			int y = (int) ((o.posY - 25) / 50);
-
-			if (x >= 0 && y >= 0 && x < this.selectedTiles.length && y < this.selectedTiles[0].length && this.selectedTiles[x][y])
-			{
-				try
-				{
-					Obstacle n = o.getClass().getConstructor(String.class, double.class, double.class).newInstance(o.name, (int) (o.posX / 50 - 0.5), (int) (o.posY / 50 - 0.5));
-
-					if (o.enableStacking)
-					{
-						n.stackHeight = o.stackHeight;
-						n.startHeight = o.startHeight;
-					}
-
-					if (o.enableGroupID)
-						n.setMetadata(o.groupID + "");
-
-					this.clipboard.add(n);
-
-					if (cut)
-					{
-						obstacles.add(o);
-						Game.removeObstacles.add(o);
-					}
-
-				}
-				catch (Exception e)
-				{
-					Game.exitToCrash(e);
-				}
-			}
-		}
-
-		for (Movable t : Game.movables)
-		{
-			if (!(t instanceof Tank))
-				continue;
-
-			int x = (int) ((t.posX - 25) / 50);
-			int y = (int) ((t.posY - 25) / 50);
-
-			if (x >= 0 && y >= 0 && x < this.selectedTiles.length && y < this.selectedTiles[0].length && this.selectedTiles[x][y])
-			{
-				try
-				{
-					Tank n;
-
-					if (t.getClass().equals(TankAIControlled.class))
-					{
-						n = new TankAIControlled(((TankAIControlled) t).name, t.posX, t.posY, ((TankAIControlled) t).size, ((TankAIControlled) t).colorR, ((TankAIControlled) t).colorG, ((TankAIControlled) t).colorB, ((TankAIControlled) t).angle, ((TankAIControlled) t).shootAIType);
-						((TankAIControlled) t).cloneProperties((TankAIControlled) n);
-					}
-					else
-						n = (Tank) t.getClass().getConstructor(String.class, double.class, double.class, double.class).newInstance(((Tank) t).name, t.posX, t.posY, ((Tank) t).angle);
-
-					n.team = t.team;
-					n.destroy = t.destroy;
-					this.clipboard.add(n);
-
-					if (cut)
-					{
-						if (t instanceof TankSpawnMarker && this.spawns.size() > 1)
-						{
-							this.spawns.remove(t);
-							tanks.add((Tank) t);
-							Game.removeMovables.add(t);
-						}
-						else if (!(t instanceof TankSpawnMarker))
-						{
-							tanks.add((Tank) t);
-							Game.removeMovables.add(t);
-						}
-					}
-
-				}
-				catch (Exception e)
-				{
-					Game.exitToCrash(e);
-				}
-			}
-		}
-
-		smallestX = smallestX * Game.tile_size + 25;
-		smallestY = smallestY * Game.tile_size + 25;
-
-		for (Object o : this.clipboard)
-		{
-			if (o instanceof Obstacle)
-			{
-				((Obstacle) o).posX -= smallestX;
-				((Obstacle) o).posY -= smallestY;
-			}
-
-			else if (o instanceof Tank)
-			{
-				((Tank) o).posX -= smallestX;
-				((Tank) o).posY -= smallestY;
-			}
-		}
-
-		this.clearSelection();
-
-		if (cut)
-			actions.add(new Action.ActionCut(tanks, obstacles, (Action.ActionSelectTiles) this.actions.remove(this.actions.size() - 1)));
-
-		if (!this.clipboard.isEmpty())
-			this.pasteMode = true;
-	}
-
-	public void refreshMouseTank()
-	{
-		Tank t;
-		if (tankNum < Game.registryTank.tankEntries.size())
-			t = Game.registryTank.getEntry(tankNum).getTank(mouseTank.posX, mouseTank.posY, mouseTank.angle);
-		else
-			t = this.level.customTanks.get(tankNum - Game.registryTank.tankEntries.size()).instantiate(mouseTank.name, mouseTank.posX, mouseTank.posY, mouseTank.angle);
-		t.drawAge = mouseTank.drawAge;
-		mouseTank = t;
-	}
-
-	public double clampTileX(double x)
-	{
-		return Math.max(Game.tile_size / 2, Math.min((Game.currentSizeX - 0.5) * Game.tile_size, x));
-	}
-
-	public double clampTileY(double y)
-	{
-		return Math.max(Game.tile_size / 2, Math.min((Game.currentSizeY - 0.5) * Game.tile_size, y));
-	}
-
-	public void setEditorTeam(int i)
-	{
-		if (this.currentPlaceable == Placeable.playerTank)
-			this.playerTeamNum = i;
-		else
-			this.teamNum = i;
-	}
-
-	public int getEditorTeamNum()
-	{
-		if (this.currentPlaceable == Placeable.playerTank)
-			return this.playerTeamNum;
-		else
-			return this.teamNum;
-	}
-
-	public Team getEditorTeam()
-	{
-		if (this.currentPlaceable == Placeable.playerTank)
-			return this.teams.get(this.playerTeamNum);
-		else
-			return this.teams.get(this.teamNum);
-	}
-
-	@Override
-	public ArrayList<TankSpawnMarker> getSpawns()
-	{
-		return this.spawns;
-	}
-
-	public enum Placeable {enemyTank, playerTank, obstacle}
-
-	@Override
-	public double getOffsetX()
-	{
-		return offsetX - Game.currentSizeX * Game.tile_size / 2 + Panel.windowWidth / Drawing.drawing.scale / 2;
-	}
-
-	@Override
-	public double getOffsetY()
-	{
-		return offsetY - Game.currentSizeY * Game.tile_size / 2 + (Panel.windowHeight - Drawing.drawing.statsHeight) / Drawing.drawing.scale / 2;
-	}
-
-	@Override
-	public double getScale()
-	{
-		return Drawing.drawing.unzoomedScale * zoom;
-	}
-
-	static abstract class Action
-	{
-		public abstract void undo();
-		public abstract void redo();
-
-		static class ActionObstacle extends Action
-		{
-			public boolean add;
-			public Obstacle obstacle;
-
-			public ActionObstacle(Obstacle o, boolean add)
-			{
-				this.obstacle = o;
-				this.add = add;
-			}
-
-			@Override
-			public void undo()
-			{
-				if (add)
-					Game.removeObstacles.add(this.obstacle);
-				else
-					Game.addObstacle(this.obstacle);
-			}
-
-			@Override
-			public void redo()
-			{
-				if (!add)
-					Game.removeObstacles.add(this.obstacle);
-				else
-					Game.addObstacle(this.obstacle);
-			}
-		}
-
-		static class ActionTank extends Action
-		{
-			public boolean add;
-			public Tank tank;
-
-			public ActionTank(Tank t, boolean add)
-			{
-				this.tank = t;
-				this.add = add;
-			}
-
-			@Override
-			public void undo()
-			{
-				if (add)
-					Game.removeMovables.add(this.tank);
-				else
-					Game.movables.add(this.tank);
-			}
-
-			@Override
-			public void redo()
-			{
-				if (!add)
-					Game.removeMovables.add(this.tank);
-				else
-					Game.movables.add(this.tank);
-			}
-		}
-
-		static class ActionPlayerSpawn extends Action
-		{
-			public ScreenLevelEditor screenLevelEditor;
-			public boolean add;
-			public TankSpawnMarker tank;
-
-			public ActionPlayerSpawn(ScreenLevelEditor s, TankSpawnMarker t, boolean add)
-			{
-				this.screenLevelEditor = s;
-				this.tank = t;
-				this.add = add;
-			}
-
-			@Override
-			public void undo()
-			{
-				if (add)
-				{
-					Game.removeMovables.add(this.tank);
-					screenLevelEditor.spawns.remove(this.tank);
-				}
-				else
-				{
-					Game.movables.add(this.tank);
-					screenLevelEditor.spawns.add(this.tank);
-				}
-			}
-
-			@Override
-			public void redo()
-			{
-				if (!add)
-				{
-					Game.removeMovables.add(this.tank);
-					screenLevelEditor.spawns.remove(this.tank);
-				}
-				else
-				{
-					Game.movables.add(this.tank);
-					screenLevelEditor.spawns.add(this.tank);
-				}
-			}
-		}
-
-		static class ActionMovePlayer extends Action
-		{
-			public ScreenLevelEditor screenLevelEditor;
-			public ArrayList<TankSpawnMarker> oldSpawns;
-			public TankSpawnMarker newSpawn;
-
-			public ActionMovePlayer(ScreenLevelEditor s, ArrayList<TankSpawnMarker> o, TankSpawnMarker n)
-			{
-				this.screenLevelEditor = s;
-				this.oldSpawns = o;
-				this.newSpawn = n;
-			}
-
-			@Override
-			public void undo()
-			{
-				Game.removeMovables.add(newSpawn);
-				screenLevelEditor.spawns.clear();
-
-				for (TankSpawnMarker t: oldSpawns)
-				{
-					screenLevelEditor.spawns.add(t);
-					Game.movables.add(t);
-				}
-			}
-
-			@Override
-			public void redo()
-			{
-				Game.removeMovables.addAll(oldSpawns);
-
-				screenLevelEditor.spawns.clear();
-
-				Game.movables.add(newSpawn);
-				screenLevelEditor.spawns.add(newSpawn);
-			}
-		}
-
-		static class ActionSelectTiles extends Action
-		{
-			public ScreenLevelEditor screenLevelEditor;
-			public ArrayList<Integer> x;
-			public ArrayList<Integer> y;
-			public boolean select;
-
-			public ActionSelectTiles(ScreenLevelEditor s, boolean select, ArrayList<Integer> x, ArrayList<Integer> y)
-			{
-				this.screenLevelEditor = s;
-				this.select = select;
-				this.x = x;
-				this.y = y;
-			}
-
-			@Override
-			public void undo()
-			{
-				for (int i = 0; i < this.x.size(); i++)
-				{
-					screenLevelEditor.selectedTiles[this.x.get(i)][this.y.get(i)] = !select;
-				}
-
-				screenLevelEditor.refreshSelection();
-			}
-
-			@Override
-			public void redo()
-			{
-				for (int i = 0; i < this.x.size(); i++)
-				{
-					screenLevelEditor.selectedTiles[this.x.get(i)][this.y.get(i)] = select;
-				}
-
-				screenLevelEditor.refreshSelection();
-			}
-		}
-
-		static class ActionGroup extends Action
-		{
-			public ScreenLevelEditor screenLevelEditor;
-			public ArrayList<Action> actions;
-
-			public ActionGroup(ScreenLevelEditor s, ArrayList<Action> actions)
-			{
-				this.screenLevelEditor = s;
-				this.actions = actions;
-			}
-
-			@Override
-			public void undo()
-			{
-				for (Action a: this.actions)
-					a.undo();
-			}
-
-			@Override
-			public void redo()
-			{
-				for (Action a: this.actions)
-					a.redo();
-			}
-		}
-
-		static class ActionDeleteCustomTank extends Action
-		{
-			public ScreenLevelEditor screenLevelEditor;
-			public ArrayList<Action> actions;
-			public TankAIControlled tank;
-
-			public ActionDeleteCustomTank(ScreenLevelEditor s, ArrayList<Action> actions, TankAIControlled t)
-			{
-				this.screenLevelEditor = s;
-				this.actions = actions;
-				this.tank = t;
-			}
-
-			@Override
-			public void undo()
-			{
-				for (Action a: this.actions)
-					a.undo();
-
-				this.screenLevelEditor.level.customTanks.add(this.tank);
-			}
-
-			@Override
-			public void redo()
-			{
-				for (Action a: this.actions)
-					a.redo();
-
-				this.screenLevelEditor.level.customTanks.remove(this.tank);
-			}
-		}
-
-
-		static class ActionPaste extends Action
-		{
-			public ScreenLevelEditor levelEditor;
-			public ArrayList<Action> actions;
-
-			public ActionPaste(ScreenLevelEditor s, ArrayList<Action> actions)
-			{
-				this.levelEditor = s;
-				this.actions = actions;
-			}
-
-			@Override
-			public void undo()
-			{
-				for (int i = this.actions.size() - 1; i >= 0; i--)
-					this.actions.get(i).undo();
-			}
-
-			@Override
-			public void redo()
-			{
-				for (Action a: actions)
-					a.redo();
-			}
-		}
-
-		static class ActionCut extends Action
-		{
-			public ArrayList<Tank> tanks;
-			public ArrayList<Obstacle> obstacles;
-			public ActionSelectTiles deselect;
-
-			public ActionCut(ArrayList<Tank> tanks, ArrayList<Obstacle> obstacles, ActionSelectTiles deselect)
-			{
-				this.tanks = tanks;
-				this.obstacles = obstacles;
-				this.deselect = deselect;
-			}
-
-			@Override
-			public void undo()
-			{
-				for (Obstacle o: this.obstacles)
-				{
-					Game.addObstacle(o);
-				}
-
-				Game.movables.addAll(this.tanks);
-				this.deselect.undo();
-			}
-
-			@Override
-			public void redo()
-			{
-				for (int i = 0; i < Game.obstacles.size(); i++)
-				{
-					Game.removeObstacles.addAll(this.obstacles);
-				}
-
-				for (int i = 0; i < Game.movables.size(); i++)
-				{
-					if (Game.movables.get(i) instanceof Tank)
-					{
-						for (Tank o : this.tanks)
-						{
-							if (Game.movables.get(i).equals(o))
-								Game.movables.remove(i);
-						}
-					}
-				}
-
-				this.deselect.redo();
-			}
-		}
-	}
-
-	@Override
-	public void onAttemptClose()
-	{
-		paused = true;
-		Game.screen = new OverlayConfirmSave(Game.screen, this);
-	}
-
-	@Override
-	public void setupLights()
-	{
-		for (Obstacle o: Game.obstacles)
-		{
-			if (o instanceof IDrawableLightSource && ((IDrawableLightSource) o).lit())
-			{
-				double[] l = ((IDrawableLightSource) o).getLightInfo();
-				l[0] = Drawing.drawing.gameToAbsoluteX(o.posX, 0);
-				l[1] = Drawing.drawing.gameToAbsoluteY(o.posY, 0);
-				l[2] = (o.startHeight + 25) * Drawing.drawing.scale;
-				Panel.panel.lights.add(l);
-			}
-		}
-
-		for (Movable o: Game.movables)
-		{
-			if (o instanceof IDrawableLightSource && ((IDrawableLightSource) o).lit())
-			{
-				double[] l = ((IDrawableLightSource) o).getLightInfo();
-				l[0] = Drawing.drawing.gameToAbsoluteX(o.posX, 0);
-				l[1] = Drawing.drawing.gameToAbsoluteY(o.posY, 0);
-				l[2] = (o.posZ + 25) * Drawing.drawing.scale;
-				Panel.panel.lights.add(l);
-			}
-		}
-
-		for (Effect o: Game.effects)
-		{
-			if (o instanceof IDrawableLightSource && ((IDrawableLightSource) o).lit())
-			{
-				double[] l = ((IDrawableLightSource) o).getLightInfo();
-				l[0] = Drawing.drawing.gameToAbsoluteX(o.posX, 0);
-				l[1] = Drawing.drawing.gameToAbsoluteY(o.posY, 0);
-				l[2] = (o.posZ) * Drawing.drawing.scale;
-				Panel.panel.lights.add(l);
-			}
-		}
-	}
-
+            }
+            else
+            {
+                Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 - 0, "Scroll or press %s or %s to zoom", Game.game.input.editorZoomIn.getInputs(), Game.game.input.editorZoomOut.getInputs());
+                Drawing.drawing.displayInterfaceText(this.centerX, Drawing.drawing.interfaceSizeY - this.objYSpace * 2 + this.objYSpace / 2, "Press %s to re-center", Game.game.input.editorRevertCamera.getInputs());
+            }
+        }
+
+        if ((currentMode == EditorMode.select || symmetrySelectMode || specialBuildTool()) && !this.paused)
+        {
+            double lowX = Math.min(selectX1, selectX2);
+            double highX = Math.max(selectX1, selectX2);
+            double lowY = Math.min(selectY1, selectY2);
+            double highY = Math.max(selectY1, selectY2);
+
+            if (currentMode == EditorMode.select)
+                previewSelection(lowX, highX, lowY, highY, extra);
+            else
+                previewShape(lowX, highX, lowY, highY);
+        }
+
+        buttons.draw();
+
+        if (Game.screen instanceof IOverlayScreen || this.paused)
+        {
+            Drawing.drawing.setColor(127, 178, 228, 64);
+            //Drawing.drawing.setColor(0, 0, 0, 127);
+            Game.game.window.shapeRenderer.fillRect(0, 0, Game.game.window.absoluteWidth + 1, Game.game.window.absoluteHeight + 1);
+        }
+
+        if (!paused && showControls)
+        {
+            pause.image = "icons/pause.png";
+            pause.imageSizeX = 40 * controlsSizeMultiplier;
+            pause.imageSizeY = 40 * controlsSizeMultiplier;
+
+            if (lockAdd)
+                selectAddToggle.image = "icons/select_add.png";
+            else
+                selectAddToggle.image = "icons/select_remove.png";
+
+            if (lockSquare)
+                selectSquareToggle.image = "icons/square_locked.png";
+            else
+                selectSquareToggle.image = "icons/square_unlocked.png";
+        }
+    }
+
+    public void changeMetadata(int add)
+    {
+        MetadataSelector m = mousePlaceable.getPrimaryMetadataProperty();
+
+        if (m != null)
+            m.changeMetadata(this, mousePlaceable, add);
+    }
+
+    public void previewSelection(double lowX, double highX, double lowY, double highY, double extra)
+    {
+        if (!selectInverted)
+            Drawing.drawing.setColor(255, 255, 255, 127, 0.3);
+        else
+            Drawing.drawing.setColor(0, 0, 0, 127, 0.3);
+
+        if (!selectHeld)
+        {
+            if (!Game.game.window.touchscreen)
+            {
+                if (hoverObstacle == null)
+                    Drawing.drawing.fillRect(mousePlaceable.posX, mousePlaceable.posY, Game.tile_size, Game.tile_size);
+                else
+                    hoverObstacle.draw3dOutline(230 + extra, 230 + extra, 230 + extra, 128);
+            }
+        }
+        else
+        {
+            for (double x = lowX; x <= highX; x += Game.tile_size)
+            {
+                for (double y = lowY; y <= highY; y += Game.tile_size)
+                {
+                    int gridX = (int) (x / Game.tile_size);
+                    int gridY = (int) (y / Game.tile_size);
+
+                    if (Game.enable3d)
+                    {
+//						if (Game.getObstacle(gridX, gridY) != null)
+//						{
+//							Game.getObstacle(gridX, gridY).draw3dOutline(230 + extra, 230 + extra, 230 + extra, 128);
+//						}
+//						else
+                        {
+                            if (!selectInverted)
+                                Drawing.drawing.setColor(255, 255, 255, 127, 0.3);
+                            else
+                                Drawing.drawing.setColor(0, 0, 0, 127, 0.3);
+
+                            // For now, 2d because we don't have grid lookup
+                            Drawing.drawing.fillRect(x, y, Game.tile_size, Game.tile_size);
+                        }
+                    }
+                    else
+                        Drawing.drawing.fillRect(x, y, Game.tile_size, Game.tile_size);
+                }
+            }
+
+            Drawing.drawing.setColor(255, 255, 255);
+
+            if (symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flipHorizontal || symmetryType == SymmetryType.rot180 || symmetryType == SymmetryType.rot90 || symmetryType == SymmetryType.flip8)
+                Drawing.drawing.fillRect((selectX2 + selectX1) / 2, (selectY2 + selectY1) / 2, (selectX2 - selectX1), 10);
+
+            if (symmetryType == SymmetryType.flipBoth || symmetryType == SymmetryType.flipVertical || symmetryType == SymmetryType.rot90 || symmetryType == SymmetryType.flip8)
+                Drawing.drawing.fillRect((selectX2 + selectX1) / 2, (selectY2 + selectY1) / 2, 10, (selectX2 - selectX1));
+        }
+    }
+
+    public void magicSelect(int x, int y, boolean contiguous)
+    {
+        Obstacle selected = Game.getObstacle(x, y);
+        String obstacleName = selected != null ? selected.name : null;
+
+        boolean[][] obstacleGrid = new boolean[Game.currentSizeX][Game.currentSizeY];
+        ArrayList<Integer> xPos = new ArrayList<>();
+        ArrayList<Integer> yPos = new ArrayList<>();
+
+        for (Obstacle o : Game.obstacles)
+        {
+            int i = (int) (o.posX / Game.tile_size);
+            int j = (int) (o.posY / Game.tile_size);
+
+            if (i >= 0 && i < Game.currentSizeX && j >= 0 && j < Game.currentSizeY)
+            {
+                if (obstacleName == null || o.name.equals(obstacleName))
+                    obstacleGrid[i][j] = true;
+            }
+        }
+
+        if (!contiguous)
+        {
+            for (int i = 0; i < obstacleGrid.length; i++)
+            {
+                for (int j = 0; j < obstacleGrid[i].length; j++)
+                {
+                    if (obstacleGrid[i][j] == (obstacleName != null) && selectedTiles[i][j] == selectInverted)
+                    {
+                        selectedTiles[i][j] = !selectInverted;
+                        xPos.add(i);
+                        yPos.add(j);
+                    }
+                }
+            }
+        }
+        else
+        {
+            Deque<int[]> points = new ArrayDeque<>();
+            points.add(new int[]{x, y});
+            boolean[][] explored = new boolean[Game.currentSizeX][Game.currentSizeY];
+
+            while (!points.isEmpty())
+            {
+                int[] next = points.removeFirst();
+
+                int i = next[0];
+                int j = next[1];
+                if (i >= 0 && i < Game.currentSizeX && j >= 0 && j < Game.currentSizeY && !explored[next[0]][next[1]])
+                {
+                    explored[i][j] = true;
+
+                    if (obstacleGrid[i][j] != (obstacleName == null))
+                    {
+                        if (selectedTiles[i][j] == selectInverted)
+                        {
+                            selectedTiles[i][j] = !selectInverted;
+                            xPos.add(i);
+                            yPos.add(j);
+                        }
+
+                        points.add(new int[]{i - 1, j});
+                        points.add(new int[]{i + 1, j});
+                        points.add(new int[]{i, j - 1});
+                        points.add(new int[]{i, j + 1});
+                    }
+                }
+            }
+        }
+
+        if (!xPos.isEmpty())
+        {
+            this.undoActions.add(new EditorAction.ActionSelectTiles(this, !selectInverted, xPos, yPos));
+            this.refreshSelection();
+        }
+
+//		boolean obs = Game.getObstacle(x, y) != null || Game.getSurfaceObstacle(x, y) == null;
+//		Obstacle o = obs ? Game.getObstacle(x, y) : Game.getSurfaceObstacle(x, y);
+//		Class<? extends Obstacle> cls = o != null ? o.getClass() : null;
+//		ArrayList<Integer> xs = new ArrayList<>(), ys = new ArrayList<>();
+//		ArrayDeque<Point> deque = new ArrayDeque<>();
+//		deque.add(new Point(x, y));
+//
+//		selection = true;
+//
+//		while (!deque.isEmpty())
+//		{
+//			Point p = deque.pop();
+//			for (int i = 0; i < 4; i++)
+//			{
+//				int newX = p.x + Game.dirX[i];
+//				int newY = p.y + Game.dirY[i];
+//
+//				if (newX < 0 || newX >= Game.currentSizeX || newY < 0 || newY >= Game.currentSizeY || selectedTiles[newX][newY] ||
+//						Math.abs(newX - x) + Math.abs(newY - y) > 50)
+//					continue;
+//
+//				Obstacle o1 = obs ? Game.getObstacle(newX, newY) : Game.getSurfaceObstacle(newX, newY);
+//				if (cls == null)
+//				{
+//					if (o1 != null)
+//						continue;
+//				}
+//				else
+//				{
+//					if (o1 == null || !o1.getClass().equals(cls))
+//						continue;
+//				}
+//
+//				xs.add(newX);
+//				ys.add(newY);
+//				selectedTiles[newX][newY] = true;
+//				deque.add(new Point(newX, newY));
+//			}
+//		}
+//
+//		this.undoActions.add(new EditorAction.ActionSelectTiles(this, true, xs, ys));
+    }
+
+    public void previewShape(double lowX, double highX, double lowY, double highY)
+    {
+        if (!selectHeld)
+            return;
+
+        Shape s = Shape.getShape(buildTool, lowX, highX, lowY, highY, selectX1 < selectX2, selectY1 < selectY2);
+        for (Shape.XY xy: s.xys)
+        {
+            if (currentPlaceable == Placeable.enemyTank)
+                ((Tank) mousePlaceable).drawOutlineAt((xy.x + 0.5) * Game.tile_size, (xy.y + 0.5) * Game.tile_size);
+            else
+                ((Obstacle) mousePlaceable).drawOutlineAt((xy.x + 0.5) * Game.tile_size, (xy.y + 0.5) * Game.tile_size);
+        }
+    }
+
+    public boolean specialBuildTool()
+    {
+        return currentMode == EditorMode.build && buildTool != BuildTool.normal && currentPlaceable != Placeable.playerTank;
+    }
+
+    public void play()
+    {
+        this.save();
+        this.replaceSpawns();
+        Game.currentLevel.reloadTiles();
+
+        Game.currentLevel = new Level(Game.currentLevelString);
+        Game.currentLevel.tilesRandomSeed = level.tilesRandomSeed;
+        Game.currentLevel.timed = level.timer > 0;
+        Game.currentLevel.timer = level.timer;
+
+        for (Obstacle o : Game.obstacles)
+        {
+            if (o instanceof ObstacleBeatBlock)
+            {
+                Game.currentLevel.synchronizeMusic = true;
+                Game.currentLevel.beatBlocks |= (int) ((ObstacleBeatBlock) o).beatFrequency;
+            }
+        }
+
+        Game.resetNetworkIDs();
+        for (Movable m : Game.movables)
+        {
+            if (m instanceof Tank)
+                ((Tank) m).registerNetworkID();
+        }
+
+        Game.screen = new ScreenGame(this.name);
+        Game.player.hotbar.coins = this.level.startingCoins;
+
+        Game.currentLevel.playerBuilds.get(0).clonePropertiesTo(Game.playerTank);
+        Game.player.buildName = Game.currentLevel.playerBuilds.get(0).buildName;
+    }
+
+    public void replaceSpawns()
+    {
+        int playerCount = 1;
+        if (ScreenPartyHost.isServer && ScreenPartyHost.server != null)
+            playerCount += ScreenPartyHost.server.connections.size();
+
+        ArrayList<Integer> availablePlayerSpawns = new ArrayList<>();
+        ArrayList<INetworkEvent> playerEvents = new ArrayList<>();
+
+        for (int i = 0; i < playerCount; i++)
+        {
+            if (availablePlayerSpawns.isEmpty())
+            {
+                for (int j = 0; j < this.spawns.size(); j++)
+                    availablePlayerSpawns.add(j);
+            }
+
+            int spawn = availablePlayerSpawns.remove((int) (Math.random() * availablePlayerSpawns.size()));
+
+            double x = this.spawns.get(spawn).posX;
+            double y = this.spawns.get(spawn).posY;
+            double angle = this.spawns.get(spawn).angle;
+            Team team = this.spawns.get(spawn).team;
+
+            if (ScreenPartyHost.isServer)
+            {
+                Game.addPlayerTank(Game.players.get(i), x, y, angle, team);
+            }
+            else if (!ScreenPartyLobby.isClient)
+            {
+                TankPlayer tank = new TankPlayer(x, y, angle);
+
+                if (spawns.size() <= 1)
+                    tank.drawAge = Game.tile_size;
+
+                Game.playerTank = tank;
+                tank.team = team;
+                Game.addMovable(tank);
+            }
+        }
+
+        for (Movable m : Game.movables)
+        {
+            if (m instanceof TankSpawnMarker)
+                Game.removeMovables.add(m);
+        }
+    }
+
+    public void clearSelection()
+    {
+        selection = false;
+
+        ArrayList<Integer> x = new ArrayList<>();
+        ArrayList<Integer> y = new ArrayList<>();
+
+        for (int i = 0; i < selectedTiles.length; i++)
+        {
+            for (int j = 0; j < selectedTiles[i].length; j++)
+            {
+                if (selectedTiles[i][j])
+                {
+                    x.add(i);
+                    y.add(j);
+                }
+
+                selectedTiles[i][j] = false;
+            }
+        }
+
+        this.undoActions.add(new EditorAction.ActionSelectTiles(this, false, x, y));
+
+    }
+
+    public void refreshSelection()
+    {
+        selection = false;
+
+        for (int x = 0; x < Game.currentSizeX; x++)
+        {
+            for (int y = 0; y < Game.currentSizeY; y++)
+            {
+                if (selectedTiles[x][y])
+                {
+                    selection = true;
+                    break;
+                }
+            }
+        }
+
+        for (Obstacle o : Game.obstacles)
+        {
+            heightBlocksSelected = false;
+            int i = (int) (o.posX / Game.tile_size);
+            int j = (int) (o.posY / Game.tile_size);
+            if (i >= 0 && i < Game.currentSizeX && j >= 0 && j < Game.currentSizeY && selectedTiles[i][j] &&
+                o.getMetadataProperty("stack_height") != null)
+            {
+                heightBlocksSelected = true;
+                break;
+            }
+        }
+    }
+
+    public void adjustSelectionHeight(int num)
+    {
+        this.undoActions.add(new EditorAction.ActionChangeHeight(this, num));
+        for (Obstacle o : Game.obstacles)
+        {
+            int i = (int) (o.posX / Game.tile_size);
+            int j = (int) (o.posY / Game.tile_size);
+
+            if (i >= 0 && i < Game.currentSizeX && j >= 0 && j < Game.currentSizeY && selectedTiles[i][j])
+            {
+                MetadataSelector s = o.getMetadataProperty("stack_height");
+                if (s == null)
+                    continue;
+
+                s.changeMetadata(this, o, num);
+
+                if (Game.enable3d)
+                {
+                    Drawing.drawing.terrainRenderer.remove(o);
+                    Game.redrawObstacles.add(o);
+                }
+            }
+        }
+    }
+
+    public void copy(boolean cut)
+    {
+        ArrayList<Tank> tanks = new ArrayList<>();
+        ArrayList<Obstacle> obstacles = new ArrayList<>();
+
+        clipboard = new EditorClipboard();
+
+        for (Obstacle o : Game.obstacles)
+        {
+            int x = (int) ((o.posX - 25) / 50);
+            int y = (int) ((o.posY - 25) / 50);
+
+            if (x >= 0 && y >= 0 && x < this.selectedTiles.length && y < this.selectedTiles[0].length && this.selectedTiles[x][y])
+            {
+                try
+                {
+                    Obstacle n = o.getClass().getConstructor(String.class, double.class, double.class).newInstance(o.name, (int) (o.posX / 50 - 0.5), (int) (o.posY / 50 - 0.5));
+                    n.setMetadata(o.getMetadata());
+                    clipboard.add(n);
+
+                    if (cut)
+                    {
+                        obstacles.add(o);
+                        Game.removeObstacles.add(o);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Game.exitToCrash(e);
+                }
+            }
+        }
+
+        for (Movable t : Game.movables)
+        {
+            if (!(t instanceof Tank))
+                continue;
+
+            int x = (int) ((t.posX - 25) / 50);
+            int y = (int) ((t.posY - 25) / 50);
+
+            if (x >= 0 && y >= 0 && x < this.selectedTiles.length && y < this.selectedTiles[0].length && this.selectedTiles[x][y])
+            {
+                try
+                {
+                    Tank n;
+
+                    if (t.getClass().equals(TankAIControlled.class))
+                    {
+                        n = new TankAIControlled(((TankAIControlled) t).name, t.posX, t.posY, ((TankAIControlled) t).size, ((TankAIControlled) t).color.red, ((TankAIControlled) t).color.green, ((TankAIControlled) t).color.blue, ((TankAIControlled) t).angle, ((TankAIControlled) t).shootAIType);
+                        ((TankAIControlled) t).cloneProperties((TankAIControlled) n);
+                    }
+                    else
+                        n = (Tank) t.getClass().getConstructor(String.class, double.class, double.class, double.class).newInstance(((Tank) t).name, t.posX, t.posY, ((Tank) t).angle);
+
+                    n.team = t.team;
+                    n.destroy = t.destroy;
+                    clipboard.add(n);
+
+                    if (cut)
+                    {
+                        if (t instanceof TankSpawnMarker && this.spawns.size() > 1)
+                        {
+                            this.spawns.remove(t);
+                            tanks.add((Tank) t);
+                            Game.removeMovables.add(t);
+                        }
+                        else if (!(t instanceof TankSpawnMarker))
+                        {
+                            tanks.add((Tank) t);
+                            Game.removeMovables.add(t);
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Game.exitToCrash(e);
+                }
+            }
+        }
+
+        clipboard.updateParams();
+
+        this.clearSelection();
+
+        if (cut)
+            undoActions.add(new EditorAction.ActionCut(tanks, obstacles, (EditorAction.ActionSelectTiles) this.undoActions.remove(this.undoActions.size() - 1)));
+
+        if (!clipboard.isEmpty())
+        {
+            this.setMode(EditorMode.paste);
+        }
+    }
+
+    public void createShortcutButton(MetadataSelector s)
+    {
+        InputBindingGroup i = Game.game.inputBindings.get(s.metadataProperty.keybind());
+        EditorButton e = new EditorButton(shortcutButtons, s.metadataProperty.image(), 50, 50, () ->
+        {
+            this.paused = true;
+            this.objectMenu = true;
+            s.openEditorOverlay(this);
+        }, "", i);
+        e.setDescription(s.metadataProperty.name() + " (%s)", i.getInputs());
+    }
+
+    public void setMousePlaceable()
+    {
+        double prevMousePlaceableX = mousePlaceable.posX;
+        double prevMousePlaceableY = mousePlaceable.posY;
+
+        if (this.currentPlaceable == Placeable.enemyTank)
+        {
+            Tank t;
+            if (tankNum < Game.registryTank.tankEntries.size())
+                t = Game.registryTank.getEntry(tankNum).getTank(mousePlaceable.posX, mousePlaceable.posY, 0);
+            else
+            {
+                TankAIControlled t1 = this.level.customTanks.get(tankNum - Game.registryTank.tankEntries.size());
+                t = t1.instantiate(t1.name, mousePlaceable.posX, mousePlaceable.posY, t1.angle);
+            }
+
+            t.drawAge = 100;
+            mousePlaceable = t;
+        }
+        else if (this.currentPlaceable == Placeable.obstacle)
+        {
+            this.mousePlaceable = Game.registryObstacle.getEntry(obstacleNum).getObstacle(0, 0);
+        }
+        else if (this.currentPlaceable == Placeable.playerTank)
+        {
+            this.mousePlaceable = new TankPlayer(0, 0, 0).setDefaultColor();
+        }
+
+        this.buttons.bottomRight.removeAll(this.shortcutButtons);
+        this.shortcutButtons.clear();
+
+        MetadataSelector primary = mousePlaceable.getPrimaryMetadataProperty();
+        MetadataSelector secondary = mousePlaceable.getSecondaryMetadataProperty();
+
+        if (primary != null)
+            createShortcutButton(primary);
+
+        if (secondary != null)
+            createShortcutButton(secondary);
+
+        for (MetadataSelector a : mousePlaceable.getMetadataProperties().values())
+        {
+            if (a != null)
+            {
+                if (currentMetadata.get(a.id) != null)
+                    a.setMetadata(null, this.mousePlaceable, currentMetadata.get(a.id));
+
+                if (!a.id.equals(mousePlaceable.primaryMetadataID) && !a.id.equals(mousePlaceable.secondaryMetadataID))
+                    createShortcutButton(a);
+            }
+        }
+
+        if (mousePlaceable instanceof Tank)
+            ((Tank) mousePlaceable).angle = ((Tank) mousePlaceable).orientation;
+
+        if (this.currentMode == EditorMode.build)
+            this.buttons.bottomRight.addAll(this.shortcutButtons);
+
+        this.buttons.refreshButtons();
+
+        this.mousePlaceable.refreshMetadata();
+        mousePlaceable.posX = prevMousePlaceableX;
+        mousePlaceable.posY = prevMousePlaceableY;
+    }
+
+    public double clampTileX(double x)
+    {
+        return Math.max(Game.tile_size / 2, Math.min((Game.currentSizeX - 0.5) * Game.tile_size, x));
+    }
+
+    public double clampTileY(double y)
+    {
+        return Math.max(Game.tile_size / 2, Math.min((Game.currentSizeY - 0.5) * Game.tile_size, y));
+    }
+
+    @Override
+    public ArrayList<TankSpawnMarker> getSpawns()
+    {
+        return this.spawns;
+    }
+
+    public enum Placeable
+    {enemyTank, playerTank, obstacle}
+
+    @Override
+    public double getOffsetX()
+    {
+        return offsetX - Game.currentSizeX * Game.tile_size / 2 + Panel.windowWidth / Drawing.drawing.scale / 2;
+    }
+
+    @Override
+    public double getOffsetY()
+    {
+        return offsetY - Game.currentSizeY * Game.tile_size / 2 + (Panel.windowHeight - Drawing.drawing.statsHeight) / Drawing.drawing.scale / 2;
+    }
+
+    @Override
+    public double getScale()
+    {
+        return Drawing.drawing.unzoomedScale * zoom;
+    }
+
+    public enum SymmetryType
+    {none, flipHorizontal, flipVertical, flipBoth, flip8, rot180, rot90}
+
+    @Override
+    public void onAttemptClose()
+    {
+        paused = true;
+        Game.screen = new OverlayConfirmSave(Game.screen, this);
+    }
+
+    @Override
+    public void setupLights()
+    {
+        ScreenGame.setupGameLights();
+    }
 }

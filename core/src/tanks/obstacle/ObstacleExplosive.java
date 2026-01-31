@@ -1,5 +1,6 @@
 package tanks.obstacle;
 
+import tanks.Drawing;
 import tanks.Game;
 import tanks.Movable;
 import tanks.Panel;
@@ -9,9 +10,12 @@ import tanks.item.Item;
 import tanks.item.ItemDummyBlockExplosion;
 import tanks.network.event.EventObstacleDestroy;
 import tanks.rendering.ShaderExplosive;
-import tanks.tank.*;
+import tanks.tank.Explosion;
+import tanks.tank.IAvoidObject;
+import tanks.tank.Mine;
+import tanks.tank.Tank;
 
-public class ObstacleExplosive extends Obstacle implements IAvoidObject
+public class ObstacleExplosive extends ObstacleStackable implements IAvoidObject
 {
     public double timer = 25;
     public Tank trigger = Game.dummyTank;
@@ -23,6 +27,7 @@ public class ObstacleExplosive extends Obstacle implements IAvoidObject
 
         this.draggable = false;
         this.destructible = true;
+        this.allowBounce = false;
         this.colorR = 255;
         this.colorG = Math.random() * 40 + 80;
         this.colorB = 0;
@@ -64,7 +69,8 @@ public class ObstacleExplosive extends Obstacle implements IAvoidObject
             else
                 this.trigger = (Tank) m;
 
-            this.explode();
+            this.setUpdate(true);
+            this.timer = 0;
         }
     }
 
@@ -75,7 +81,7 @@ public class ObstacleExplosive extends Obstacle implements IAvoidObject
             return;
 
         if (!ScreenPartyLobby.isClient)
-            this.update = true;
+            this.setUpdate(true);
 
         if (m instanceof Explosion)
         {
@@ -119,5 +125,14 @@ public class ObstacleExplosive extends Obstacle implements IAvoidObject
     public double getSeverity(double posX, double posY)
     {
         return Math.sqrt(Math.pow(posX - this.posX, 2) + Math.pow(posY - this.posY, 2));
+    }
+
+    @Override
+    public void draw3dOutline(double r, double g, double b, double a)
+    {
+        super.draw3dOutline(r, g, b, a);
+
+        Drawing.drawing.setColor(255, 0, 0, 64);
+        Mine.drawRange2D(this.posX, this.posY, this.getRadius());
     }
 }

@@ -7,11 +7,9 @@ import tanks.hotbar.ItemBar;
 import tanks.item.Item;
 import tanks.item.ItemBullet;
 import tanks.item.ItemMine;
+import tanks.network.ServerHandler;
 import tanks.network.event.*;
-import tanks.tank.Tank;
-import tanks.tank.TankAIControlled;
-import tanks.tank.TankPlayer;
-import tanks.tank.TankPlayerRemote;
+import tanks.tank.*;
 
 import java.util.*;
 
@@ -31,6 +29,8 @@ public class Crusade
 	public int currentLevel = 0;
 	public int saveLevel = 0;
 
+	public ArrayList<Double> bestTimes = null;
+
 	public double timePassed = 0;
 
 	public static class CrusadeLevel
@@ -38,6 +38,7 @@ public class Crusade
 		public String levelName;
 		public String levelString;
 		public ArrayList<TankAIControlled> tanks;
+        public ArrayList<TankPlayer.ShopTankBuild> buildOverrides = new ArrayList<>();
 
 		public CrusadeLevel(String name, String lvl)
 		{
@@ -56,8 +57,9 @@ public class Crusade
 
 	public ArrayList<TankAIControlled> customTanks = new ArrayList<>();
 	public ArrayList<Item.CrusadeShopItem> crusadeShopItems = new ArrayList<>();
+	public ArrayList<TankPlayer.CrusadeShopTankBuild> crusadeShopBuilds = new ArrayList<>();
 
-	public String name = "";
+    public String name = "";
 	public String fileName = "";
 
 	public boolean internal = false;
@@ -78,6 +80,9 @@ public class Crusade
 
 	public String description = null;
 
+	/**
+	 * Used for internal built-in crusades
+	 */
 	public Crusade(ArrayList<String> levelArray, String name, String file)
 	{
 		internal = true;
@@ -89,6 +94,27 @@ public class Crusade
 			c.append(s).append("\n");
 
 		contents = c.substring(0, c.length() - 1);
+
+		BaseFile f = Game.game.fileManager.getFile(Game.homedir + Game.crusadeDir + "/records/internal" + fileName.replace(".tanks", ".record"));
+		if (f.exists())
+		{
+			try
+			{
+				f.startReading();
+				this.bestTimes = new ArrayList<>();
+
+				while (f.hasNextLine())
+				{
+					this.bestTimes.add(Double.parseDouble(f.nextLine()));
+				}
+
+				f.stopReading();
+			}
+			catch (Exception e)
+			{
+				Game.exitToCrash(e);
+			}
+		}
 	}
 
 	public Crusade(String s, String name)
@@ -154,6 +180,12 @@ public class Crusade
 				case "tanks":
 					parsing = 3;
 					break;
+				case "builds":
+					parsing = 4;
+					break;
+                case "build_overrides":
+                    parsing = 5;
+                    break;
 				default:
 					if (parsing == 0)
 					{
@@ -193,11 +225,26 @@ public class Crusade
 						tankOccurrences.put(t, first);
 						this.customTanks.add(t);
 					}
+					else if (parsing == 4)
+					{
+						TankPlayer.CrusadeShopTankBuild t = TankPlayer.CrusadeShopTankBuild.fromString(s);
+						this.crusadeShopBuilds.add(t);
+					}
+                    else if (parsing == 5)
+                    {
+                        int d = s.indexOf(" ");
+                        int lvl = Integer.parseInt(s.substring(0, d));
+                        TankPlayer.ShopTankBuild t = TankPlayer.ShopTankBuild.fromString(s.substring(d + 1));
+                        this.levels.get(lvl).buildOverrides.add(t);
+                    }
 					break;
 			}
 
 			i++;
 		}
+
+		if (crusadeShopBuilds.isEmpty())
+			crusadeShopBuilds.add(new TankPlayer.CrusadeShopTankBuild());
 		
 		this.name = name;
 
@@ -217,13 +264,21 @@ public class Crusade
 		}
 	}
 
+    public void setupPlayer(Player p)
+    {
+        p.hotbar.itemBar = new ItemBar(p);
+        p.hotbar.coins = 0;
+        p.ownedBuilds = new HashSet<>();
+        p.ownedBuilds.add(this.crusadeShopBuilds.get(0).name);
+        p.remainingLives = startingLives;
+        crusadePlayers.put(p, new CrusadePlayer(p));
+    }
+
 	public void begin()
 	{
 		for (int i = 0; i < Game.players.size(); i++)
 		{
-			Game.players.get(i).hotbar.itemBar = new ItemBar(Game.players.get(i));
-			Game.players.get(i).hotbar.coins = 0;
-			Game.players.get(i).remainingLives = startingLives;
+			setupPlayer(Game.players.get(i));
 		}
 
 		currentLevel = 0;
@@ -238,21 +293,25 @@ public class Crusade
 		this.started = true;
 		this.crusadePlayers.clear();
 
-        this.crusadePlayers.put(Game.player, new CrusadePlayer(Game.player));
-
         this.loadLevel();
 	}
 
 	public void loadLevel()
 	{
-		Level l = new Level(this.levels.get(this.currentLevel).levelString);
-		l.customTanks = this.customTanks;
+		Level l = new Level(this.levels.get(this.currentLevel).levelString, this.customTanks);
 
-		Game.player.hotbar.enabledItemBar = true;
 		Game.player.hotbar.enabledCoins = true;
+		Game.player.hotbar.itemBar.showItems = true;
 
 		int playersTotal = 0;
 		int livesTotal = 0;
+
+		HashSet<String> availableBuilds = new HashSet<>();
+		for (TankPlayer.ShopTankBuild b: this.getBuildsShop())
+		{
+			availableBuilds.add(b.name);
+		}
+
 		for (Player player : Game.players)
 		{
 			if (crusadePlayers.get(player) != null)
@@ -260,6 +319,14 @@ public class Crusade
 				livesTotal += player.remainingLives;
 				playersTotal++;
 			}
+
+			if (player.buildName == null || !availableBuilds.contains(player.buildName))
+            {
+                if (levels.get(this.currentLevel).buildOverrides.isEmpty())
+                    player.buildName = this.crusadeShopBuilds.get(0).name;
+                else
+                    player.buildName = levels.get(this.currentLevel).buildOverrides.get(0).name;
+            }
 		}
 
 		for (Player player : Game.players)
@@ -297,32 +364,29 @@ public class Crusade
 
 			if (player.remainingLives > 0)
 				l.includedPlayers.add(player);
-
-			player.hotbar.enabledItemBar = true;
 		}
 
 		l.loadLevel();
 
+		ArrayList<TankPlayer.ShopTankBuild> builds = this.getBuildsShop();
+
 		for (Player player : Game.players)
 		{
-			player.hotbar.coins = crusadePlayers.get(player).coins;
+			CrusadePlayer cp = crusadePlayers.get(player);
+			player.hotbar.coins = cp.coins;
+			player.ownedBuilds = cp.ownedBuilds;
+			player.buildName = cp.currentBuild;
 
-			ItemBar i = crusadePlayers.get(player).itemBar;
+			player.ownedBuilds.add(player.buildName);
+
+			ItemBar i = cp.itemBar;
 
 			if (i == null)
 				player.hotbar.itemBar = new ItemBar(player);
 			else
 				player.hotbar.itemBar = i;
 
-			if (player != Game.player)
-			{
-				Game.eventsOut.add(new EventUpdateCoins(player));
-
-				for (int in = 0; in < player.hotbar.itemBar.slots.length; in++)
-					Game.eventsOut.add(new EventSetItem(player, in, player.hotbar.itemBar.slots[in]));
-
-				Game.eventsOut.add(new EventLoadItemBarSlot(player.clientID, player.hotbar.itemBar.selected));
-			}
+			player.hotbar.itemBar.showItems = true;
 
 			if (player.hotbar.enabledItemBar)
 			{
@@ -337,6 +401,47 @@ public class Crusade
 				}
 			}
 		}
+
+		if (ScreenPartyHost.isServer)
+			Level.broadcastBuilds(builds);
+
+		for (Movable m: Game.movables)
+		{
+			if (m instanceof TankPlayerRemote)
+				((TankPlayerRemote) m).buildName = ((TankPlayerRemote) m).player.buildName;
+            else if (m instanceof TankPlayable)
+                ((TankPlayable) m).buildName = ((TankPlayable) m).player.buildName;
+        }
+
+		if (Game.playerTank != null)
+		{
+			for (int n = 0; n < builds.size(); n++)
+			{
+				TankPlayer.ShopTankBuild s = builds.get(n);
+				if (s.name.equals(Game.player.buildName))
+					s.clonePropertiesTo(Game.playerTank);
+			}
+		}
+
+        if (ScreenPartyHost.isServer)
+        {
+            for (ServerHandler sh : ScreenPartyHost.server.connections)
+            {
+                if (sh.player != null)
+                {
+                    sh.queueEvent(new EventUpdateCoins(sh.player));
+
+                    for (int in = 0; in < sh.player.hotbar.itemBar.slots.length; in++)
+                        sh.queueEvent(new EventSetItem(sh.player, in, sh.player.hotbar.itemBar.slots[in]));
+
+                    Game.eventsOut.add(new EventSetSelectedItems(sh.player.hotbar.itemBar.selected, sh.player.hotbar.itemBar.selectedPrimaryAbility, sh.player.hotbar.itemBar.selectedSecondaryAbility));
+                }
+            }
+        }
+
+        int sel = Game.player.hotbar.itemBar.selected;
+        Game.player.hotbar.itemBar.setItem(-1);
+        Game.player.hotbar.itemBar.setItem(sel);
 
 		this.disconnectedPlayers.clear();
 
@@ -424,12 +529,10 @@ public class Crusade
 				boolean found = false;
 				for (Movable m: Game.movables)
 				{
-					if (m instanceof TankPlayer && ((TankPlayer) m).player == p && m.destroy)
-						return false;
-					else if (m instanceof TankPlayerRemote && ((TankPlayerRemote) m).player == p && m.destroy)
+					if (m instanceof IServerPlayerTank && ((IServerPlayerTank) m).getPlayer() == p && m.destroy)
 						return false;
 
-					if ((m instanceof TankPlayer && ((TankPlayer) m).player == p) || (m instanceof TankPlayerRemote && ((TankPlayerRemote) m).player == p))
+					if (m instanceof IServerPlayerTank && ((IServerPlayerTank) m).getPlayer() == p)
 						found = true;
 				}
 
@@ -455,6 +558,27 @@ public class Crusade
 		return shop;
 	}
 
+	public ArrayList<TankPlayer.ShopTankBuild> getBuildsShop()
+	{
+        ArrayList<TankPlayer.ShopTankBuild> overrides = this.levels.get(this.currentLevel).buildOverrides;
+
+		ArrayList<TankPlayer.ShopTankBuild> shop = new ArrayList<>();
+
+        if (overrides.isEmpty())
+        {
+            for (int i = 0; i < this.crusadeShopBuilds.size(); i++)
+            {
+                TankPlayer.CrusadeShopTankBuild item = this.crusadeShopBuilds.get(i);
+                if (item.levelUnlock <= this.currentLevel)
+                    shop.add(item);
+            }
+        }
+        else
+            return new ArrayList<>(overrides);
+
+		return shop;
+	}
+
 	public void saveHotbars()
 	{
 		for (Player p: Game.players)
@@ -469,6 +593,8 @@ public class Crusade
 
 			cp.itemBar = p.hotbar.itemBar;
 			cp.coins = p.hotbar.coins;
+			cp.ownedBuilds = p.ownedBuilds;
+			cp.currentBuild = p.buildName;
 		}
 	}
 
@@ -535,10 +661,8 @@ public class Crusade
 		{
 			for (int i = 0; i < Game.movables.size(); i++)
 			{
-				if (Game.movables.get(i) instanceof TankPlayer && !Game.movables.get(i).destroy)
-					((TankPlayer) Game.movables.get(i)).player.remainingLives--;
-				else if (Game.movables.get(i) instanceof TankPlayerRemote && !Game.movables.get(i).destroy)
-					((TankPlayerRemote) Game.movables.get(i)).player.remainingLives--;
+				if (Game.movables.get(i) instanceof IServerPlayerTank && !Game.movables.get(i).destroy)
+					((IServerPlayerTank) Game.movables.get(i)).getPlayer().remainingLives--;
 			}
 		}
 

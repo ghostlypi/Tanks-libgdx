@@ -1,11 +1,14 @@
 package tanks.gui.screen;
 
 import tanks.tank.Mine;
-import tanks.tankson.FieldPointer;
+import tanks.tank.MinePropertyCategory;
 import tanks.tankson.Pointer;
+import tanks.tankson.Property;
 
 public class ScreenEditorMine extends ScreenEditorTanksONable<Mine>
 {
+    public ScreenEditorItem screenEditorItem;
+
     public ScreenEditorMine(Pointer<Mine> mine, Screen screen)
     {
         super(mine, screen);
@@ -17,7 +20,11 @@ public class ScreenEditorMine extends ScreenEditorTanksONable<Mine>
     @Override
     public void setupTabs()
     {
-        Tab tab = new Tab(this, "Mine properties", "");
+        this.iconPrefix = "mineeditor";
+
+        Tab tab = new Tab(this, "Mine properties", MinePropertyCategory.mine);
+        new Tab(this, "Colors", MinePropertyCategory.colors).rows = 3;
+
         this.setTab(tab);
     }
 
@@ -28,5 +35,17 @@ public class ScreenEditorMine extends ScreenEditorTanksONable<Mine>
         this.topLevelButtons.get(0).image = "mine.png";
         this.topLevelButtons.get(0).imageSizeX *= 0.8;
         this.topLevelButtons.get(0).imageSizeY *= 0.8;
+
+        this.topLevelButtons.get(1).imageSizeX *= 0.8;
+        this.topLevelButtons.get(1).imageSizeY *= 0.8;
+    }
+
+    @Override
+    public void validateChangedProperty(Pointer<?> f, Property p, Object oldValue)
+    {
+        if (this.screenEditorItem != null)
+            this.screenEditorItem.validateChangedProperty(f, p, oldValue);
+        else
+            super.validateChangedProperty(f, p, oldValue);
     }
 }

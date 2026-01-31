@@ -1,16 +1,12 @@
 package tanks.gui.screen;
 
-import basewindow.InputCodes;
 import tanks.*;
 import tanks.gui.Button;
+import tanks.item.ItemBullet;
 import tanks.minigames.Minigame;
-import tanks.obstacle.Face;
-import tanks.obstacle.ISolidObject;
 import tanks.obstacle.Obstacle;
+import tanks.rendering.TrackRenderer;
 import tanks.tank.*;
-
-import java.util.Arrays;
-import java.util.Collections;
 
 import static basewindow.InputCodes.*;
 
@@ -21,15 +17,9 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 
 	public int chain;
 
-	public double lCenterX;
-	public double lCenterY;
+	public double lCenterX, lCenterY;
+	public double rCenterX, rCenterY;
 
-	public double rCenterX;
-	public double rCenterY;
-
-	public Face[] horizontalFaces;
-	public Face[] verticalFaces;
-	
 	protected int[] inputs = new int[11];
 	protected int inputCount = 0;
 
@@ -50,7 +40,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 		}
 	}
 	);
-	
+
 	Button options = new Button(this.rCenterX, this.rCenterY - this.objYSpace * 0.5, this.objWidth, this.objHeight, "Options", () ->
 	{
 		Game.silentCleanUp();
@@ -71,7 +61,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 		Game.screen = new ScreenAbout();
 	}
 	);
-	
+
 	Button play = new Button(this.rCenterX, this.rCenterY - this.objYSpace * 1.5, this.objWidth, this.objHeight, "Play!", () ->
 	{
 		Game.silentCleanUp();
@@ -99,14 +89,12 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 				Game.currentLevel.shadow = 0.75;
 				Game.currentSizeX = 28;
 				Game.currentSizeY = 18;
-				Game.game.solidGrid = new boolean[Game.currentSizeX][Game.currentSizeY];
-				Game.game.unbreakableGrid = new boolean[Game.currentSizeX][Game.currentSizeY];
 
 				ScreenGame.finishedQuick = false;
 			}
 		}
 	}
-		);
+	);
 
 	Button languages = new Button(-1000, -1000, this.objHeight * 1.5, this.objHeight * 1.5, "", () ->
 	{
@@ -117,6 +105,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 
 	public ScreenTitle()
 	{
+		Effect.timeSinceLastTrack = TrackRenderer.getMaxTrackAge();
 		Game.movables.clear();
 		ScreenGame.finished = false;
 
@@ -129,16 +118,8 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 
 		languages.imageSizeX = this.objHeight;
 		languages.imageSizeY = this.objHeight;
-
-		this.horizontalFaces = new Face[2];
-		this.horizontalFaces[0] = new Face(null, 0, 0, Game.currentSizeX * Game.tile_size, 0, true, false, true, true);
-		this.horizontalFaces[1] = new Face(null, 0, Game.currentSizeY * Game.tile_size, Game.currentSizeX * Game.tile_size, Game.currentSizeY * Game.tile_size, true, true,true, true);
-
-		this.verticalFaces = new Face[2];
-		this.verticalFaces[0] = new Face(null, 0, 0,0, Game.currentSizeY * Game.tile_size, false, false,true, true);
-		this.verticalFaces[1] = new Face(null, Game.currentSizeX * Game.tile_size, 0, Game.currentSizeX * Game.tile_size, Game.currentSizeY * Game.tile_size, false, true, true, true);
 	}
-	
+
 	@Override
 	public void update()
 	{
@@ -166,12 +147,12 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			about.update();
 
 			this.music = "menu_1.ogg";
-			
+
 			for (Integer i: Game.game.window.validPressedKeys)
 			{
 				this.inputs[inputCount] = i;
 				inputCount = (inputCount + 1) % inputs.length;
-				
+
 				if (i == KEY_ENTER)
 				{
 					int[] inputs = new int[]{KEY_UP, KEY_UP, KEY_DOWN, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_LEFT, KEY_RIGHT, KEY_B, KEY_A, KEY_ENTER};
@@ -200,7 +181,13 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 				}
 			}
 
-			Game.game.window.validPressedKeys.clear();
+			Game.game.window.validPressedKeys.remove((Integer) KEY_UP);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_DOWN);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_LEFT);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_RIGHT);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_B);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_A);
+			Game.game.window.validPressedKeys.remove((Integer) KEY_ENTER);
 		}
 
 		if (this.controlPlayer)
@@ -209,83 +196,29 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			this.logo.invulnerable = false;
 		}
 
-		for (int i = 0; i < Game.game.groundHeightGrid.length; i++)
-		{
-			System.arraycopy(Game.tilesDepth[i], 0, Game.game.groundHeightGrid[i], 0, Game.game.groundHeightGrid[i].length);
-		}
-
-		Game.horizontalFaces.clear();
-		Game.verticalFaces.clear();
-
-		this.horizontalFaces[0].update(0, 0, Game.currentSizeX * Game.tile_size, 0);
-		this.horizontalFaces[1].update(0, Game.currentSizeY * Game.tile_size, Game.currentSizeX * Game.tile_size, Game.currentSizeY * Game.tile_size);
-		Game.horizontalFaces.add(this.horizontalFaces[0]);
-		Game.horizontalFaces.add(this.horizontalFaces[1]);
-
-		this.verticalFaces[0].update(0, 0, 0, Game.currentSizeY * Game.tile_size);
-		this.verticalFaces[1].update(Game.currentSizeX * Game.tile_size, 0, Game.currentSizeX * Game.tile_size, Game.currentSizeY * Game.tile_size);
-		Game.verticalFaces.add(this.verticalFaces[0]);
-		Game.verticalFaces.add(this.verticalFaces[1]);
-
-		for (Movable m : Game.movables)
-		{
-			if (Double.isNaN(m.posX) || Double.isNaN(m.posY))
-			{
-				throw new RuntimeException("Movable with NaN position: " + m.toString() + " " + m.lastPosX + " " + m.lastPosY);
-			}
-
-			if (m instanceof ISolidObject && !(m instanceof Tank && !(((Tank) m).targetable || ((Tank) m).invulnerabilityTimer > 0)))
-			{
-				Game.horizontalFaces.addAll(Arrays.asList(((ISolidObject) m).getHorizontalFaces()));
-
-				Game.verticalFaces.addAll(Arrays.asList(((ISolidObject) m).getVerticalFaces()));
-			}
-		}
-
-		for (Obstacle o : Game.obstacles)
-		{
-			Face[] faces = o.getHorizontalFaces();
-			boolean[] valid = o.getValidHorizontalFaces(true);
-			for (int i = 0; i < faces.length; i++)
-			{
-				if (valid[i])
-					Game.horizontalFaces.add(faces[i]);
-			}
-
-			faces = o.getVerticalFaces();
-			valid = o.getValidVerticalFaces(true);
-			for (int i = 0; i < faces.length; i++)
-			{
-				if (valid[i])
-					Game.verticalFaces.add(faces[i]);
-			}
-		}
-
-		try
-		{
-			Collections.sort(Game.horizontalFaces);
-		}
-		catch (Exception e)
-		{
-			System.out.println(Game.horizontalFaces);
-			Game.exitToCrash(e);
-		}
-
-		try
-		{
-			Collections.sort(Game.verticalFaces);
-		}
-		catch (Exception e)
-		{
-			System.out.println(Game.verticalFaces);
-			Game.exitToCrash(e);
-		}
-
 		Obstacle.draw_size = Game.tile_size;
-		for (int i = 0; i < Game.tracks.size(); i++)
-		{
-			Game.tracks.get(i).update();
-		}
+        double time = Panel.frameFrequency;
+        while (time > 0)
+        {
+            Effect e = Game.tracks.peek();
+            if (e == null)
+                break;
+
+            e.maxAge -= time;
+
+            if (e.maxAge <= 0)
+            {
+                time = -e.maxAge;
+                e.state = Effect.State.recycle;
+                Game.recycleEffects.add(Game.tracks.poll());
+
+                Drawing.drawing.trackRenderer.remove(e);
+            }
+			else
+				break;
+        }
+
+        Effect.timeSinceLastTrack += Panel.frameFrequency;
 
 		int enemies = 0;
 		for (int i = 0; i < Game.movables.size(); i++)
@@ -294,8 +227,15 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 
 			if (m != this.logo || this.controlPlayer)
 			{
+                if (m.skipNextUpdate)
+                {
+                    m.skipNextUpdate = false;
+                    continue;
+                }
+
 				m.preUpdate();
 				m.update();
+                m.postUpdate();
 			}
 
 			if (m instanceof Tank && m != this.logo)
@@ -309,6 +249,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			if ((m instanceof Tank && m.team != logo.team) || (m instanceof Crate && ((Crate) m).tank.team != logo.team))
 				enemies++;
 		}
+
 
 		if (enemies <= 1 && !this.controlPlayer)
 		{
@@ -340,11 +281,11 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			for (int i = 0; i < (this.wave - 1) * 3 * (Math.random() * 0.5 + 0.5) + 3; i++)
 			{
 				Drawing.drawing.playGlobalSound("flame.ogg", 0.75f);
-				int x = (int) (Math.random() * Game.tilesDepth.length);
-				int y = (int) (Math.random() * Game.tilesDepth[0].length);
+				int x = (int) (Math.random() * Game.currentSizeX);
+				int y = (int) (Math.random() * Game.currentSizeY);
 				Tank t = Game.registryTank.getRandomTank().getTank((x + 0.5) * Game.tile_size, (y + 0.5) * Game.tile_size, (int) (Math.random() * 4));
 				t.team = Game.enemyTeam;
-				Game.movables.add(new Crate(t));
+				Game.movables.add(new Crate(t, Math.random() * 400 + 800));
 			}
 		}
 
@@ -352,18 +293,9 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			wave = 1;
 
 		for (int i = 0; i < Game.effects.size(); i++)
-		{
-			Game.effects.get(i).update();
-		}
+            Game.effects.get(i).update();
 
-		Game.tracks.removeAll(Game.removeTracks);
-		Game.removeTracks.clear();
-
-		Game.movables.removeAll(Game.removeMovables);
-		Game.removeMovables.clear();
-
-		Game.effects.removeAll(Game.removeEffects);
-		Game.removeEffects.clear();
+        ScreenGame.handleRemovals();
 
 		if (!Game.movables.contains(this.logo) && Game.screen == this)
 		{
@@ -374,7 +306,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			this.logo.hidden = true;
 			this.logo.team = Game.playerTeam;
 			this.logo.maxSpeed *= 1.5;
-			this.logo.bullet.speed *= 1.5;
+			((ItemBullet)(this.logo.abilities.get(0).item)).bullet.speed *= 1.5;
 			Game.playerTank = logo;
 			Game.movables.add(this.logo);
 			this.controlPlayer = false;
@@ -412,7 +344,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 			this.logo.invulnerable = true;
 			this.logo.hidden = true;
 			this.logo.maxSpeed *= 1.5;
-			this.logo.bullet.speed *= 1.5;
+			((ItemBullet)(this.logo.abilities.get(0).item)).bullet.speed *= 1.5;
 			Game.playerTank = logo;
 			this.logo.team = Game.playerTeam;
 
@@ -437,22 +369,25 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 
 		about.draw();
 
+		Drawing.drawing.setColor(0, 0, 0);
+		Drawing.drawing.setInterfaceFontSize(24);
+
 		if (Game.player.enableTertiaryColor)
-			Drawing.drawing.setColor(Game.player.colorR3, Game.player.colorG3, Game.player.colorB3);
+			Drawing.drawing.setColor(Game.player.color3);
 		else
-			Drawing.drawing.setColor(Turret.calculateSecondaryColor(Game.player.colorR), Turret.calculateSecondaryColor(Game.player.colorG), Turret.calculateSecondaryColor(Game.player.colorB));
+			Drawing.drawing.setColor(Turret.calculateSecondaryColor(Game.player.color.red), Turret.calculateSecondaryColor(Game.player.color.green), Turret.calculateSecondaryColor(Game.player.color.blue));
 		Drawing.drawing.setInterfaceFontSize(this.titleSize * 2.5);
 		Drawing.drawing.displayInterfaceText(this.lCenterX + 4, 4 + this.lCenterY - this.objYSpace, "Tanks");
 
-		Drawing.drawing.setColor(Turret.calculateSecondaryColor(Game.player.colorR2), Turret.calculateSecondaryColor(Game.player.colorG2), Turret.calculateSecondaryColor(Game.player.colorB2));
+		Drawing.drawing.setColor(Turret.calculateSecondaryColor(Game.player.color2.red), Turret.calculateSecondaryColor(Game.player.color2.green), Turret.calculateSecondaryColor(Game.player.color2.blue));
 		Drawing.drawing.setInterfaceFontSize(this.titleSize);
 		Drawing.drawing.displayInterfaceText(this.lCenterX + 2, 2 + this.lCenterY - this.objYSpace * 2 / 9, "The Crusades");
 
-		Drawing.drawing.setColor(Game.player.colorR, Game.player.colorG, Game.player.colorB);
+		Drawing.drawing.setColor(Game.player.color);
 		Drawing.drawing.setInterfaceFontSize(this.titleSize * 2.5);
 		Drawing.drawing.displayInterfaceText(this.lCenterX, this.lCenterY - this.objYSpace, "Tanks");
 
-		Drawing.drawing.setColor(Game.player.colorR2, Game.player.colorG2, Game.player.colorB2);
+		Drawing.drawing.setColor(Game.player.color2);
 		Drawing.drawing.setInterfaceFontSize(this.titleSize);
 		Drawing.drawing.displayInterfaceText(this.lCenterX, this.lCenterY - this.objYSpace * 2 / 9, "The Crusades");
 
@@ -473,7 +408,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 		{
 			Game.effects.get(i).drawGlow();
 		}
-	}
+    }
 
 	@Override
 	public void draw()
@@ -488,9 +423,7 @@ public class ScreenTitle extends Screen implements ISeparateBackgroundScreen
 	public void drawPostMouse()
 	{
 		if (!this.controlPlayer && (Game.game.window.pressedKeys.contains(KEY_LEFT_SHIFT) || Game.game.window.pressedKeys.contains(KEY_RIGHT_SHIFT)) && Drawing.drawing.interfaceScaleZoom == 1)
-		{
 			this.logo.draw();
-		}
 	}
 
 	@Override

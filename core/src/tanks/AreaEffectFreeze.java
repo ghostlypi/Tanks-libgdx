@@ -1,6 +1,8 @@
 package tanks;
 
-import tanks.AttributeModifier.Operation;
+import tanks.attribute.AttributeModifier;
+import tanks.attribute.AttributeModifier.Operation;
+import tanks.attribute.StatusEffect;
 import tanks.gui.screen.ScreenGame;
 import tanks.gui.screen.ScreenPartyLobby;
 import tanks.network.event.EventCreateFreezeEffect;
@@ -31,9 +33,8 @@ public class AreaEffectFreeze extends AreaEffect
 				Effect e = Effect.createNewEffect(this.posX, this.posY, Effect.EffectType.piece);
 				double var = 50;
 				e.fastRemoveOnExit = true;
-				e.colR = Math.min(255, Math.max(0, 255 + Math.random() * var - var / 2));
-				e.colG = Math.min(255, Math.max(0, 255 + Math.random() * var - var / 2));
-				e.colB = Math.min(255, Math.max(0, 255 + Math.random() * var - var / 2));
+				e.setColorWithNoise(255, 255, 255, var);
+                e.setGlowColor(e.color);
 
 				if (Game.enable3d)
 					e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * this.size / 200.0);
@@ -47,19 +48,17 @@ public class AreaEffectFreeze extends AreaEffect
 
 		if (!this.isRemote)
 		{
-			for (int i = 0; i < Game.movables.size(); i++)
+			for (Movable m : Movable.getMovablesInRadius(this.posX, this.posY, this.size / 2))
 			{
-				Movable m = Game.movables.get(i);
+                if (m.destroy)
+                    continue;
 
-				if (Movable.distanceBetween(this, m) <= this.size / 2 && !m.destroy)
-				{
-					AttributeModifier a = new AttributeModifier("freeze", AttributeModifier.velocity, Operation.multiply, -1);
-					a.duration = 500;
-					a.warmupAge = 50;
-					a.deteriorationAge = 400;
-					m.addAttribute(a);
-				}
-			}
+                AttributeModifier a = AttributeModifier.newInstance("freeze", AttributeModifier.velocity, Operation.multiply, -1);
+                a.duration = 500;
+                a.warmupAge = 50;
+                a.deteriorationAge = 400;
+                m.em().addAttribute(a);
+            }
 		}
 	}
 
@@ -84,14 +83,10 @@ public class AreaEffectFreeze extends AreaEffect
 		if (ScreenGame.finishedQuick && this.age < 400)
 			this.age = 400;
 
-		for (int i = 0; i < Game.movables.size(); i++)
+		for (Movable m : Movable.getMovablesInRadius(this.posX, this.posY, this.size / 2))
 		{
-			Movable m = Game.movables.get(i);
-
-			if (Movable.distanceBetween(this, m) <= this.size / 2 && !m.destroy)
-			{
-				m.addStatusEffect(StatusEffect.ice, 0, 5, 10);
-			}
+			if (!m.destroy)
+                m.em().addStatusEffect(StatusEffect.ice, 0, 5, 10);
 		}
 
 		super.update();

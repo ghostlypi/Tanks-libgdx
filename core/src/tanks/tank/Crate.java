@@ -11,11 +11,13 @@ public class Crate extends Movable
     public Tank tank;
     public double size;
     public double age = 0;
+    public double iPosZ;
 
-    public Crate(Tank tank)
+    public Crate(Tank tank, double height)
     {
         super(tank.posX, tank.posY);
-        this.posZ = 1000;
+        this.iPosZ = height;
+        this.posZ = this.iPosZ;
         this.tank = tank;
         this.size = tank.size * 1.5;
         this.drawLevel = 9;
@@ -24,6 +26,9 @@ public class Crate extends Movable
     @Override
     public void draw()
     {
+        if (this.age <= 0)
+            Drawing.drawing.playGlobalSound("accel.ogg", (float) (0.75f / this.iPosZ * 1000), 0.25f);
+
         if (Game.game.window.drawingShadow || !Game.shadowsEnabled)
             this.age += Panel.frameFrequency;
 
@@ -31,63 +36,56 @@ public class Crate extends Movable
 
         if (Game.enable3d)
         {
-            Drawing.drawing.setColor(this.tank.secondaryColorR, this.tank.secondaryColorG, this.tank.secondaryColorB);
-            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ, size, size, size);
+            Drawing.drawing.setColor(this.tank.secondaryColor);
+            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ, size, size, size, this.tank.baseSkin.base);
 
-            TankModels.FullTankModel model = TankModels.fullTankModels.get(this.tank.baseModel.file);
+            Drawing.drawing.setColor(this.tank.color);
+            Drawing.drawing.setColor(this.tank.color.red * 0.6, this.tank.color.green * 0.6, this.tank.color.blue * 0.6);
+            Drawing.drawing.setColor(this.tank.color.red * 0.8, this.tank.color.green * 0.8, this.tank.color.blue * 0.8);
 
-            if (model == TankModels.tank)
-                model = TankModels.fullTankModels.get(this.tank.colorModel.file);
-
-            Drawing.drawing.setColor(this.tank.colorR, this.tank.colorG, this.tank.colorB);
-            //Drawing.drawing.drawModel(m, this.posX, this.posY,  this.posZ - 1, size * 0.8, size * 0.8, (size + 2) * 2, 0, 0, 0);
-            Drawing.drawing.setColor(this.tank.colorR * 0.6, this.tank.colorG * 0.6, this.tank.colorB * 0.6);
-            //Drawing.drawing.drawModel(m, this.posX, this.posY + size * 0.5 + 1,  this.posZ + size * 0.4 + 1, size * 0.8, size * 0.8, (size + 2) * 2, 0, 0, Math.PI / 2);
-            Drawing.drawing.setColor(this.tank.colorR * 0.8, this.tank.colorG * 0.8, this.tank.colorB * 0.8);
-            //Drawing.drawing.drawModel(m, this.posX + size * 0.5 + 1, this.posY,  this.posZ + size * 0.4 + 1, size * 0.8, size * 0.8, (size + 2) * 2, 0, Math.PI / 2, 0);
-            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ, size * 0.8, size * 0.8, size + 2, model.texture);
-            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ + size * 0.1, size * 0.8, size + 2, size * 0.8, model.texture);
-            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ + size * 0.1, size + 2, size * 0.8, size * 0.8, model.texture);
+            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ, size * 0.8, size * 0.8, size + 2, this.tank.colorSkin.base);
+            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ + size * 0.1, size * 0.8, size + 2, size * 0.8, this.tank.colorSkin.base);
+            Drawing.drawing.fillBox(this.posX, this.posY, this.posZ + size * 0.1, size + 2, size * 0.8, size * 0.8, this.tank.colorSkin.base);
 
             if (this.tank.emblem != null)
             {
-                Drawing.drawing.setColor(this.tank.emblemR, this.tank.emblemG, this.tank.emblemB);
+                Drawing.drawing.setColor(this.tank.emblemColor);
                 Drawing.drawing.drawImage(this.tank.emblem, this.posX, this.posY, this.posZ + size + 2, size * 0.75, size * 0.75);
             }
         }
         else
         {
-            Drawing.drawing.setColor(this.tank.secondaryColorR, this.tank.secondaryColorG, this.tank.secondaryColorB);
+            Drawing.drawing.setColor(this.tank.secondaryColor);
             Drawing.drawing.fillRect(this.posX, this.posY - this.posZ, size, size);
-            Drawing.drawing.setColor(this.tank.colorR, this.tank.colorG, this.tank.colorB);
+            Drawing.drawing.setColor(this.tank.color);
             Drawing.drawing.fillRect(this.posX, this.posY - this.posZ, size * 0.8, size * 0.8);
 
             if (this.tank.emblem != null)
             {
-                Drawing.drawing.setColor(this.tank.emblemR, this.tank.emblemG, this.tank.emblemB);
+                Drawing.drawing.setColor(this.tank.emblemColor);
                 Drawing.drawing.drawImage(this.tank.emblem, this.posX, this.posY - this.posZ, size * 0.75, size * 0.75);
             }
         }
 
-        double frac = Math.max(0, (1000 - this.posZ) / 1000);
+        double frac = Math.max(0, (this.iPosZ - this.posZ) / this.iPosZ);
 
-        Drawing.drawing.setColor(this.tank.colorR, this.tank.colorG, this.tank.colorB, frac * 255, 1);
+        Drawing.drawing.setColor(this.tank.color, frac * 255, 1);
         fillOutlineRect(this.posX, this.posY, this.size * (2 - frac));
-        Drawing.drawing.setColor(this.tank.colorR, this.tank.colorG, this.tank.colorB, 255, 1);
+        Drawing.drawing.setColor(this.tank.color, 255, 1);
         fillOutlineRect(this.posX, this.posY, this.size * (frac));
 
-        Drawing.drawing.setColor(this.tank.emblemR, this.tank.emblemG, this.tank.emblemB);
+        Drawing.drawing.setColor(this.tank.emblemColor);
         if (this.tank.emblem != null)
             Drawing.drawing.drawImage(this.tank.emblem, this.posX, this.posY, frac * this.size * 0.75, frac * this.size * 0.75);
 
         if (Game.glowEnabled)
         {
-            Drawing.drawing.setColor(this.tank.secondaryColorR, this.tank.secondaryColorG, this.tank.secondaryColorB, frac * 255, 1);
+            Drawing.drawing.setColor(this.tank.secondaryColor.red, this.tank.secondaryColor.green, this.tank.secondaryColor.blue, frac * 255, 1);
             Drawing.drawing.fillGlow(this.posX, this.posY, this.size * 4, this.size * 4);
         }
     }
 
-    public void fillOutlineRect(double x, double y, double size)
+    public static void fillOutlineRect(double x, double y, double size)
     {
         double border = size / 10;
 
@@ -110,7 +108,7 @@ public class Crate extends Movable
         {
             this.posZ = 0;
             this.destroy = true;
-            Drawing.drawing.playSound("open.ogg");
+            Drawing.drawing.playSound("open2.ogg");
 
             tank.droppedFromCrate = true;
             tank.drawAge = 50;

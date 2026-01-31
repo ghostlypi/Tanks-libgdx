@@ -1,38 +1,25 @@
 package tanks;
 
 import basewindow.*;
+import com.codedisaster.steamworks.SteamMatchmaking;
 import tanks.bullet.*;
-import tanks.extension.Extension;
-import tanks.extension.ExtensionRegistry;
-import tanks.generator.LevelGenerator;
-import tanks.generator.LevelGeneratorRandom;
-import tanks.gui.Button;
-import tanks.gui.ChatFilter;
-import tanks.gui.input.InputBindingGroup;
-import tanks.gui.input.InputBindings;
+import tanks.extension.*;
+import tanks.generator.*;
+import tanks.gui.*;
+import tanks.gui.input.*;
 import tanks.gui.screen.*;
-import tanks.gui.screen.leveleditor.OverlayEditorMenu;
-import tanks.gui.screen.leveleditor.ScreenLevelEditor;
-import tanks.hotbar.Hotbar;
-import tanks.hotbar.ItemBar;
-import tanks.item.Item;
-import tanks.item.ItemBullet;
-import tanks.item.ItemMine;
-import tanks.item.ItemShield;
-import tanks.minigames.Arcade;
-import tanks.minigames.Minigame;
-import tanks.minigames.TeamDeathmatch;
-import tanks.network.Client;
-import tanks.network.NetworkEventMap;
-import tanks.network.SteamNetworkHandler;
-import tanks.network.SynchronizedList;
+import tanks.gui.screen.leveleditor.*;
+import tanks.gui.screen.leveleditor.selector.*;
+import tanks.gui.screen.leveleditor.selector.SelectorColor;
+import tanks.hotbar.*;
+import tanks.item.*;
+import tanks.minigames.*;
+import tanks.network.*;
 import tanks.network.event.*;
 import tanks.network.event.online.*;
 import tanks.obstacle.*;
 import tanks.registry.*;
-import tanks.rendering.ShaderGroundIntro;
-import tanks.rendering.ShaderGroundOutOfBounds;
-import tanks.rendering.ShaderTracks;
+import tanks.rendering.*;
 import tanks.tank.*;
 
 import java.io.*;
@@ -40,7 +27,7 @@ import java.util.*;
 
 public class Game
 {
-	public enum Framework {lwjgl, libgdx}
+    public enum Framework {lwjgl, libgdx}
 	public static Framework framework;
 
 	public static final double tile_size = 50;
@@ -50,23 +37,26 @@ public class Game
 
 	public static final int absoluteDepthBase = 1000;
 
-	public static ArrayList<Face> horizontalFaces = new ArrayList<>();
-	public static ArrayList<Face> verticalFaces = new ArrayList<>();
-
-	public boolean[][] solidGrid;
-	public boolean[][] unbreakableGrid;
-	public double[][] heightGrid;
-	public double[][] groundHeightGrid;
-	public double[][] groundEdgeHeightGrid;
-
-	public double[][] lastHeightGrid;
+	public static boolean disableSteam = false;
 
 	public static ArrayList<Movable> movables = new ArrayList<>();
 	public static ArrayList<Obstacle> obstacles = new ArrayList<>();
+	public static HashSet<IAvoidObject> avoidObjects = new HashSet<>();
+	public static ArrayList<Obstacle> checkObstaclesToUpdate = new ArrayList<>();
+	public static HashSet<Obstacle> obstaclesToUpdate = new HashSet<>();
 	public static ArrayList<Effect> effects = new ArrayList<>();
-	public static ArrayList<Effect> tracks = new ArrayList<>();
-	public static ArrayList<Cloud> clouds = new ArrayList<>();
+    public static ArrayList<Cloud> clouds = new ArrayList<>();
 	public static SynchronizedList<Player> players = new SynchronizedList<>();
+    public static ArrayList<Player> botPlayers = new ArrayList<>();
+    public static int botPlayerCount = 0;
+
+    /**
+     * Tracks are only added to the end and removed from the beginning since they always have the same max age.
+     * This means that we can use a queue to prevent updating every track every frame. Each track keeps track of
+	 * how long ago the previous track was added (as maxAge). To handle removal, subtract time elapsed from this
+	 * lifespan value, and if it goes below zero, remove that track and repeat with the remainder of time elapsed.
+     */
+    public static Queue<Effect> tracks = new LinkedList<>();
 
 	/**
 	 * Obstacles that need to change how they look next frame
@@ -76,14 +66,36 @@ public class Game
 	/**
 	 * Ground tiles that need to be redrawn due to obstacles being added/removed over them
 	 */
-	public static HashSet<int[]> redrawGroundTiles = new HashSet<>();
+	public static class GroundTile
+	{
+		public int x;
+		public int y;
+		public GroundTile(int x, int y)
+		{
+			this.x = x;
+			this.y = y;
+		}
+
+		@Override
+		public boolean equals(Object o)
+		{
+			return o instanceof GroundTile && ((GroundTile) o).x == this.x && ((GroundTile) o).y == this.y;
+		}
+
+		@Override
+		public int hashCode()
+		{
+			return Objects.hash(x, y);
+		}
+	}
+
+	public static HashSet<GroundTile> redrawGroundTiles = new HashSet<>();
 
 	public static Player player;
 
 	public static HashSet<Movable> removeMovables = new HashSet<>();
 	public static HashSet<Obstacle> removeObstacles = new HashSet<>();
 	public static HashSet<Effect> removeEffects = new HashSet<>();
-	public static HashSet<Effect> removeTracks = new HashSet<>();
 	public static HashSet<Cloud> removeClouds = new HashSet<>();
 
 	public static ArrayList<Effect> addEffects = new ArrayList<>();
@@ -105,25 +117,23 @@ public class Game
 	public static int currentSizeY = 18;
 	public static double bgResMultiplier = 1;
 
-	public static double[][] tilesR = new double[28][18];
-	public static double[][] tilesG = new double[28][18];
-	public static double[][] tilesB = new double[28][18];
-	public static double[][] tilesFlash = new double[28][18];
-
-	public static Obstacle[][] tileDrawables = new Obstacle[28][18];
-
-	public static double[][] tilesDepth = new double[28][18];
-
 	//Remember to change the version in android's build.gradle and ios's robovm.properties
 	//Versioning has moved to version.txt
 	public static String version = "Tanks v-1.-1.-1";
 
-    public static final int network_protocol = 56;
+    public static boolean customDir = false;
+
+    public static final int network_protocol = 62;
 	public static boolean debug = false;
 	public static boolean traceAllRays = false;
-	public static boolean showTankIDs = false;
+	public static boolean showNetworkIDs = false;
 	public static boolean drawAutoZoom = false;
-	public static final boolean cinematic = false;
+	public static boolean drawFaces = false;
+    public static boolean drawAvoidObjects = false;
+    public static boolean recordMovableData = false;
+    public static final boolean cinematic = false;
+
+	public static long steamLobbyInvite = -1;
 
 	public static String lastVersion = "Tanks v0";
 
@@ -132,10 +142,14 @@ public class Game
 	public static String lastParty = "";
 	public static String lastOnlineServer = "";
 	public static boolean showIP = true;
+	public static boolean enableIPConnections = true;
+	public static SteamMatchmaking.LobbyType steamVisibility = SteamMatchmaking.LobbyType.Private;
+
+	public static boolean agreedToWorkshopAgreement = false;
 
 	public static double levelSize = 1;
 
-	public static Tank playerTank;
+	public static TankPlayer playerTank;
 
 	public static boolean bulletLocked = false;
 
@@ -146,7 +160,12 @@ public class Game
 	public static boolean enable3d = true;
 	public static boolean enable3dBg = true;
 	public static boolean angledView = false;
-	public static boolean xrayBullets = true;
+    public static boolean orthographicView = false;
+    public static boolean xrayBullets = true;
+	public static boolean showPathfinding = false;
+	public static boolean showUpdatingObstacles = false;
+	public static boolean immutableFaces = false;
+    public static boolean disableErrorFixing = false;
 
 	public static boolean followingCam = false;
 	public static boolean firstPerson = false;
@@ -163,8 +182,10 @@ public class Game
 	public static boolean enableVibrations = true;
 
 	public static boolean enableChatFilter = true;
-	public static boolean showSpeedrunTimer = false;
 	public static boolean nameInMultiplayer = true;
+
+	public static boolean showSpeedrunTimer = false;
+	public static boolean showBestTime = false;
 
 	public static boolean previewCrusades = true;
 
@@ -175,6 +196,7 @@ public class Game
 	public static boolean invulnerable = false;
 
 	public static boolean warnBeforeClosing = true;
+    public static boolean pauseOnLostFocus = true;
 
 	public static String crashMessage = "Why would this game ever even crash anyway?";
 	public static String crashLine = "What, did you think I was a bad programmer? smh";
@@ -194,7 +216,6 @@ public class Game
 	public static boolean fancyTerrain = true;
 	public static boolean effectsEnabled = true;
 	public static boolean bulletTrails = true;
-	public static boolean fancyBulletTrails = true;
 	public static boolean glowEnabled = true;
 
 	public static double effectMultiplier = 1;
@@ -221,8 +242,10 @@ public class Game
 	public static RegistryGenerator registryGenerator = new RegistryGenerator();
 	public static RegistryModelTank registryModelTank = new RegistryModelTank();
 	public static RegistryMinigame registryMinigame = new RegistryMinigame();
+    public static RegistryItemIcon registryItemIcon = new RegistryItemIcon();
+	public static RegistryMetadataSelectors registryMetadataSelectors = new RegistryMetadataSelectors();
 
-	public final HashMap<Class<? extends ShaderGroup>, ShaderGroup> shaderInstances = new HashMap<>();
+	public HashMap<Class<? extends ShaderGroup>, ShaderGroup> shaderInstances = new HashMap<>();
 	public ShaderGroundIntro shaderIntro;
 	public ShaderGroundOutOfBounds shaderOutOfBounds;
 	public ShaderTracks shaderTracks;
@@ -231,7 +254,7 @@ public class Game
 	public static boolean autoLoadExtensions = true;
 	public static ExtensionRegistry extensionRegistry = new ExtensionRegistry();
 
-	public static Extension[] extraExtensions;
+	public static Extension[] extraExtensions = null;
 	public static int[] extraExtensionOrder;
 
 	public BaseWindow window;
@@ -245,30 +268,17 @@ public class Game
 
 	public static ChatFilter chatFilter = new ChatFilter();
 
-	public ArrayList<InputBindingGroup> inputBindings = new ArrayList<>();
+	public LinkedHashMap<String, InputBindingGroup> inputBindings = new LinkedHashMap<>();
 	public InputBindings input;
 
 	public static PrintStream logger = System.err;
 
 	public static String directoryPath = "/.tanks";
 
-	public static final String logPath = directoryPath + "/logfile.txt";
-	public static final String extensionRegistryPath = directoryPath + "/extensions.txt";
-	public static final String optionsPath = directoryPath + "/options.txt";
-	public static final String controlsPath = directoryPath + "/controls.txt";
-	public static final String tutorialPath = directoryPath + "/tutorial.txt";
-	public static final String uuidPath = directoryPath + "/uuid";
-	public static final String levelDir = directoryPath + "/levels";
-	//public static final String modLevelDir = directoryPath + "/modlevels/";
-	public static final String crusadeDir = directoryPath + "/crusades";
-	public static final String savedCrusadePath = directoryPath + "/crusades/progress/";
-	public static final String itemDir = directoryPath + "/items";
-	public static final String tankDir = directoryPath + "/tanks";
-	public static final String extensionDir = directoryPath + "/extensions/";
-	public static final String crashesPath = directoryPath + "/crashes/";
-
-	public static final String resourcesPath = directoryPath + "/resources/";
-	public static final String languagesPath = resourcesPath + "languages/";
+    // initialized in initScript()
+	public static String logPath, extensionRegistryPath, optionsPath, controlsPath, tutorialPath, uuidPath, levelDir;
+	public static String crusadeDir, savedCrusadePath, itemDir, bulletEffectsDir;
+    public static String tankDir, buildDir, extensionDir, crashesPath, screenshotsPath, resourcesPath, languagesPath;
 
 	public static float soundVolume = 1f;
 	public static float musicVolume = 0.5f;
@@ -278,6 +288,8 @@ public class Game
 	public static boolean connectedToOnline = false;
 
 	public static SteamNetworkHandler steamNetworkHandler;
+	public boolean runningCallbacks = false;
+	public Throwable callbackException = null;
 
 	public static String homedir;
 	public static Game game = new Game();
@@ -303,29 +315,38 @@ public class Game
 		NetworkEventMap.register(EventAnnounceConnection.class);
 		NetworkEventMap.register(EventChat.class);
 		NetworkEventMap.register(EventPlayerChat.class);
-		NetworkEventMap.register(EventLoadLevel.class);
+        NetworkEventMap.register(EventChatClear.class);
+        NetworkEventMap.register(EventMutePlayer.class);
+        NetworkEventMap.register(EventLoadLevel.class);
 		NetworkEventMap.register(EventEnterLevel.class);
-		NetworkEventMap.register(EventLevelEndQuick.class);
-		NetworkEventMap.register(EventLevelEnd.class);
+		NetworkEventMap.register(EventSetLevelVersus.class);
+		NetworkEventMap.register(EventLevelFinishedQuick.class);
+		NetworkEventMap.register(EventLevelFinished.class);
+		NetworkEventMap.register(EventLevelExit.class);
 		NetworkEventMap.register(EventReturnToLobby.class);
 		NetworkEventMap.register(EventBeginCrusade.class);
 		NetworkEventMap.register(EventReturnToCrusade.class);
 		NetworkEventMap.register(EventShowCrusadeStats.class);
 		NetworkEventMap.register(EventLoadCrusadeHotbar.class);
 		NetworkEventMap.register(EventSetupHotbar.class);
-		NetworkEventMap.register(EventAddShopItem.class);
-		NetworkEventMap.register(EventSortShopButtons.class);
 		NetworkEventMap.register(EventPurchaseItem.class);
+		NetworkEventMap.register(EventPurchaseBuild.class);
 		NetworkEventMap.register(EventSetItem.class);
-		NetworkEventMap.register(EventSetItemBarSlot.class);
-		NetworkEventMap.register(EventLoadItemBarSlot.class);
+        NetworkEventMap.register(EventSetItemCount.class);
+        NetworkEventMap.register(EventSetItemBarSlot.class);
+        NetworkEventMap.register(EventSetSelectedItems.class);
+		NetworkEventMap.register(EventUpdateTankAbility.class);
 		NetworkEventMap.register(EventUpdateCoins.class);
 		NetworkEventMap.register(EventPlayerReady.class);
 		NetworkEventMap.register(EventPlayerAutoReady.class);
 		NetworkEventMap.register(EventPlayerAutoReadyConfirm.class);
+		NetworkEventMap.register(EventPlayerSetBuild.class);
+		NetworkEventMap.register(EventPlayerRevealBuild.class);
 		NetworkEventMap.register(EventUpdateReadyPlayers.class);
+		NetworkEventMap.register(EventUpdateEliminatedPlayers.class);
 		NetworkEventMap.register(EventUpdateRemainingLives.class);
 		NetworkEventMap.register(EventBeginLevelCountdown.class);
+        NetworkEventMap.register(EventNudge.class);
 		NetworkEventMap.register(EventTankUpdate.class);
 		NetworkEventMap.register(EventTankControllerUpdateS.class);
 		NetworkEventMap.register(EventTankControllerUpdateC.class);
@@ -347,6 +368,7 @@ public class Game
 		NetworkEventMap.register(EventBulletStunEffect.class);
 		NetworkEventMap.register(EventBulletUpdateTarget.class);
 		NetworkEventMap.register(EventBulletReboundIndicator.class);
+		NetworkEventMap.register(EventAddObstacleBullet.class);
 		NetworkEventMap.register(EventLayMine.class);
 		NetworkEventMap.register(EventMineRemove.class);
 		NetworkEventMap.register(EventMineChangeTimer.class);
@@ -426,14 +448,14 @@ public class Game
 			new RegistryTank.TankEntry(Game.registryTank, tank, name, weight, isBoss);
 	}
 
-	public static void registerBullet(Class<? extends Bullet> bullet, String name, String icon)
+	public static void registerBullet(Class<? extends Bullet> bullet, String name, ItemIcon icon)
 	{
 		new RegistryBullet.BulletEntry(Game.registryBullet, bullet, name, icon);
 	}
 
-	public static void registerItem(Class<? extends Item> item, String name, String image)
+	public static void registerItem(Class<? extends Item> item, String name, ItemIcon icon)
 	{
-		new RegistryItem.ItemEntry(Game.registryItem, item, name, image);
+		new RegistryItem.ItemEntry(Game.registryItem, item, name, icon);
 	}
 
 	public static void registerGenerator(Class<? extends LevelGenerator> generator, String name)
@@ -453,15 +475,20 @@ public class Game
 		Game.registryModelTank.registerFullModel(dir);
 	}
 
-	public static void registerTankEmblem(String dir)
+	public static void registerTankSkin(TankModels.TankSkin s)
 	{
-		Game.registryModelTank.tankEmblems.add(new RegistryModelTank.TankModelEntry("emblems/" + dir));
+		Game.registryModelTank.registerSkin(s);
 	}
 
 	public static void registerMinigame(Class<? extends Minigame> minigame, String name, String desc)
 	{
 		registryMinigame.minigames.put(name, minigame);
 		registryMinigame.minigameDescriptions.put(name, desc);
+	}
+
+	public static void registerMetadataSelector(String name, Class<? extends MetadataSelector> selector)
+	{
+		registryMetadataSelectors.metadataSelectors.put(name, selector);
 	}
 
 	public static void initScript()
@@ -474,16 +501,16 @@ public class Game
 		Panel.initialize();
 		Game.exitToTitle();
 
-		Hotbar.toggle = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY - 20, 150, 40, "", () -> Game.player.hotbar.persistent = !Game.player.hotbar.persistent
-		);
+		Hotbar.toggle = new Button(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY - 20, 150, 40, "", () -> Game.player.hotbar.persistent = !Game.player.hotbar.persistent);
 
 		steamNetworkHandler = new SteamNetworkHandler();
-		steamNetworkHandler.load();
+		if (!disableSteam)
+			steamNetworkHandler.load();
 
 		registerEvents();
-		DefaultBullets.initialize();
+		DefaultItems.initialize();
 
-		registerObstacle(Obstacle.class, "normal");
+        registerObstacle(ObstacleStackable.class, "normal");
 		registerObstacle(ObstacleIndestructible.class, "hard");
 		registerObstacle(ObstacleHole.class, "hole");
 		registerObstacle(ObstacleBouncy.class, "bouncy");
@@ -499,6 +526,8 @@ public class Game
 		registerObstacle(ObstacleBoostPanel.class, "boostpanel");
 		registerObstacle(ObstacleTeleporter.class, "teleporter");
 		registerObstacle(ObstacleBeatBlock.class, "beat");
+		registerObstacle(ObstacleGroundPaint.class, "paint");
+//		registerObstacle(ObstacleText.class, "text");
 
 		registerTank(TankDummy.class, "dummy", 0);
 		registerTank(TankBrown.class, "brown", 1);
@@ -528,30 +557,62 @@ public class Game
 		registerTank(TankLightPink.class, "lightpink", 1.0 / 10);
 		registerTank(TankBoss.class, "boss", 1.0 / 40, true);
 
-		registerBullet(Bullet.class, Bullet.bullet_class_name, "bullet_normal.png");
-		registerBullet(BulletInstant.class, BulletInstant.bullet_class_name, "bullet_laser.png");
-		registerBullet(BulletGas.class, BulletGas.bullet_class_name, "bullet_flame.png");
-		registerBullet(BulletArc.class, BulletArc.bullet_class_name, "bullet_arc.png");
-		registerBullet(BulletAirStrike.class, BulletAirStrike.bullet_class_name, "bullet_fire.png");
+		registerBullet(Bullet.class, Bullet.bullet_class_name, DefaultItemIcons.bullet_normal.getCopy());
+		registerBullet(BulletInstant.class, BulletInstant.bullet_class_name, DefaultItemIcons.bullet_laser.getCopy());
+		registerBullet(BulletGas.class, BulletGas.bullet_class_name, DefaultItemIcons.bullet_flame.getCopy());
+		registerBullet(BulletArc.class, BulletArc.bullet_class_name, DefaultItemIcons.bullet_arc.getCopy());
+		registerBullet(BulletBlock.class, BulletBlock.bullet_class_name, DefaultItemIcons.bullet_block.getCopy());
+		registerBullet(BulletAirStrike.class, BulletAirStrike.bullet_class_name, DefaultItemIcons.bullet_air_strike.getCopy());
 
-		registerItem(ItemBullet.class, ItemBullet.item_class_name, "bullet_normal.png");
-		registerItem(ItemMine.class, ItemMine.item_class_name, "mine.png");
-		registerItem(ItemShield.class, ItemShield.item_class_name, "shield.png");
+		registerItem(ItemBullet.class, ItemBullet.item_class_name, DefaultItemIcons.bullet_normal.getCopy());
+		registerItem(ItemMine.class, ItemMine.item_class_name, DefaultItemIcons.mine.getCopy());
+		registerItem(ItemShield.class, ItemShield.item_class_name, DefaultItemIcons.shield.getCopy());
 
-		registerMinigame(Arcade.class, "Arcade mode", "A gamemode which gets crazier as you---destroy more tanks.------Featuring a score mechanic, unlimited---lives, a time limit, item drops, and---end-game bonuses!");
+		registerMinigame(ArcadeClassic.class, "Arcade mode", "A gamemode which gets crazier as you---destroy more tanks.------Featuring a score mechanic, unlimited---lives, a time limit, item drops, and---end-game bonuses!");
+		registerMinigame(ArcadeBeatBlocks.class, "Beat arcade mode", "Arcade mode but with beat blocks!");
+//		registerMinigame(CastleRampage.class, "Rampage trial", "Beat the level as fast as you can---with unlimited lives and rampages!");
 //		registerMinigame(TeamDeathmatch.class, "Team deathmatch", "something");
 
-		TankPlayer.default_bullet = new Bullet();
-		TankPlayer.default_mine = new Mine();
+		registerMetadataSelector(SelectorStackHeight.selector_name, SelectorStackHeight.class);
+		registerMetadataSelector(SelectorGroupID.selector_name, SelectorGroupID.class);
+		registerMetadataSelector(SelectorBeatPattern.selector_name, SelectorBeatPattern.class);
+		registerMetadataSelector(SelectorRotation.selector_name, SelectorRotation.class);
+		registerMetadataSelector(SelectorTeam.selector_name, SelectorTeam.class);
+		registerMetadataSelector(SelectorLuminosity.selector_name, SelectorLuminosity.class);
+		registerMetadataSelector(SelectorColor.selector_name, SelectorColor.class);
+		registerMetadataSelector(SelectorColorAndNoise.selector_name, SelectorColorAndNoise.class);
 
-		homedir = System.getProperty("user.home");
-
-		if (Game.framework == Framework.libgdx)
+		if (Game.framework == Framework.libgdx || Game.customDir)
 			homedir = "";
+        else
+            homedir = System.getProperty("user.home");
+
+        logPath = directoryPath + "/logfile.txt";
+        extensionRegistryPath = directoryPath + "/extensions.txt";
+        optionsPath = directoryPath + "/options.txt";
+        controlsPath = directoryPath + "/controls.txt";
+        tutorialPath = directoryPath + "/tutorial.txt";
+        uuidPath = directoryPath + "/uuid";
+        levelDir = directoryPath + "/levels";
+//        modLevelDir = directoryPath + "/modlevels/";
+        crusadeDir = directoryPath + "/crusades";
+        savedCrusadePath = directoryPath + "/crusades/progress/";
+        itemDir = directoryPath + "/items";
+        bulletEffectsDir = directoryPath + "/bullet_effects";
+        tankDir = directoryPath + "/tanks";
+        buildDir = directoryPath + "/builds";
+        extensionDir = directoryPath + "/extensions/";
+        crashesPath = directoryPath + "/crashes/";
+        screenshotsPath = directoryPath + "/screenshots/";
+        resourcesPath = directoryPath + "/resources/";
+        languagesPath = resourcesPath + "languages/";
 
 		BaseFile directoryFile = game.fileManager.getFile(homedir + directoryPath);
 		if (!directoryFile.exists() && Game.framework != Framework.libgdx)
 		{
+            if (Game.customDir)
+                throw new RuntimeException("Custom directory does not exist: " + homedir + directoryPath);
+
 			directoryFile.mkdirs();
 			try
 			{
@@ -560,6 +621,7 @@ public class Game
 			}
 			catch (IOException e)
 			{
+                System.err.println("Failed to create logfile: " + homedir + logPath);
 				e.printStackTrace();
 				System.exit(1);
 			}
@@ -595,6 +657,12 @@ public class Game
 			itemsFile.mkdirs();
 		}
 
+        BaseFile effectsFile = game.fileManager.getFile(homedir + bulletEffectsDir);
+        if (!effectsFile.exists())
+        {
+            effectsFile.mkdirs();
+        }
+
 		BaseFile tanksFile = game.fileManager.getFile(homedir + tankDir);
 		if (!tanksFile.exists())
 		{
@@ -605,6 +673,12 @@ public class Game
 		if (!extensionsFile.exists())
 		{
 			extensionsFile.mkdirs();
+		}
+
+		BaseFile screenshotsFile = game.fileManager.getFile(homedir + screenshotsPath);
+		if (!screenshotsFile.exists())
+		{
+			screenshotsFile.mkdirs();
 		}
 
 		BaseFile uuidFile = game.fileManager.getFile(homedir + uuidPath);
@@ -646,7 +720,7 @@ public class Game
 		catch (FileNotFoundException e)
 		{
 			Game.logger = System.err;
-			Game.logger.println(new Date().toString() + " (syswarn) logfile not found despite existence of tanks directory! using stderr instead.");
+			Game.logger.println(new Date() + " (syswarn) logfile not found despite existence of tanks directory! using stderr instead.");
 		}
 
 		BaseFile optionsFile = Game.game.fileManager.getFile(Game.homedir + Game.optionsPath);
@@ -670,6 +744,11 @@ public class Game
 			}
 		}
 
+		if (!enableExtensions && extraExtensions != null)
+		{
+			System.err.println("Notice: The game has been launched from Tanks.launchWithExtensions() with extensions in options.txt disabled. Only extensions provided to launchWithExtensions() will be used.");
+		}
+
 		for (Extension e: extensionRegistry.extensions)
 			e.setUp();
 
@@ -689,99 +768,9 @@ public class Game
 
 	public static void createModels()
 	{
-		Tank.health_model = Drawing.drawing.createModel();
-
 		TankModels.initialize();
 
-		double innerHealthEdge = 0.55;
-		double outerHealthEdge = 0.575;
-		double lengthMul = 1.2;
-		double healthHeight = 0.025;
-		Tank.health_model.shapes = new ModelPart.Shape[16];
-
-		Tank.health_model.shapes[0] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, 0),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, innerHealthEdge, 0), 0.4);
-		Tank.health_model.shapes[1] = new ModelPart.Quad(
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, 0),
-				new ModelPart.Point(innerHealthEdge * lengthMul, outerHealthEdge, 0), 0.4);
-		Tank.health_model.shapes[2] = new ModelPart.Quad(
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, 0), 0.4);
-		Tank.health_model.shapes[3] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, innerHealthEdge, 0),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, 0),
-				new ModelPart.Point(innerHealthEdge * lengthMul, outerHealthEdge, 0),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, 0), 0.4);
-
-		Tank.health_model.shapes[4] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, 0), 0.6);
-		Tank.health_model.shapes[5] = new ModelPart.Quad(
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, 0), 0.6);
-		Tank.health_model.shapes[6] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, 0),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, 0), 0.8);
-		Tank.health_model.shapes[7] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, 0),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, 0), 0.8);
-
-		Tank.health_model.shapes[8] = new ModelPart.Quad(
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, 0), 0.6);
-		Tank.health_model.shapes[9] = new ModelPart.Quad(
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, 0), 0.6);
-		Tank.health_model.shapes[10] = new ModelPart.Quad(
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, 0), 0.8);
-		Tank.health_model.shapes[11] = new ModelPart.Quad(
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, 0),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, 0), 0.8);
-
-		Tank.health_model.shapes[12] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, innerHealthEdge, healthHeight), 1);
-		Tank.health_model.shapes[13] = new ModelPart.Quad(
-				new ModelPart.Point(innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, outerHealthEdge, healthHeight), 1);
-		Tank.health_model.shapes[14] = new ModelPart.Quad(
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -outerHealthEdge, healthHeight),
-				new ModelPart.Point(outerHealthEdge * lengthMul, -innerHealthEdge, healthHeight),
-				new ModelPart.Point(-innerHealthEdge * lengthMul, -innerHealthEdge, healthHeight), 1);
-		Tank.health_model.shapes[15] = new ModelPart.Quad(
-				new ModelPart.Point(-outerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, innerHealthEdge, healthHeight),
-				new ModelPart.Point(innerHealthEdge * lengthMul, outerHealthEdge, healthHeight),
-				new ModelPart.Point(-outerHealthEdge * lengthMul, outerHealthEdge, healthHeight), 1);
+		BulletBlock.block = Drawing.drawing.getModel("/models/cube/");
 	}
 
 	/**
@@ -792,13 +781,31 @@ public class Game
 	 */
 	public static void addTank(Tank tank)
 	{
-		if (tank instanceof TankPlayer || tank instanceof TankPlayerController || tank instanceof TankPlayerRemote || tank instanceof TankRemote)
+		if (tank instanceof TankPlayer || tank instanceof TankPlayerRemote || tank instanceof TankRemote)
 			Game.exitToCrash(new RuntimeException("Invalid tank added with Game.addTank(" + tank + ")"));
 
 		tank.registerNetworkID();
-		Game.movables.add(tank);
+		addMovable(tank);
 		Game.eventsOut.add(new EventTankCreate(tank));
 	}
+
+    public static void addMovable(Movable m)
+    {
+        for (Chunk c : m.getTouchingChunks())
+            c.addMovable(m);
+
+        Game.movables.add(m);
+        if (m instanceof IAvoidObject)
+            Game.avoidObjects.add((IAvoidObject) m);
+    }
+
+    public static void addTrack(Effect e)
+    {
+        Game.tracks.add(e);
+		e.firstDraw();
+        e.maxAge = Effect.timeSinceLastTrack;
+        Effect.timeSinceLastTrack = 0;
+    }
 
 	/**
 	 * Adds a tank to the game's movables list and generates/registers a network ID for it after it was spawned by another tank.
@@ -810,7 +817,7 @@ public class Game
 	public static void spawnTank(Tank tank, Tank parent)
 	{
 		tank.registerNetworkID();
-		Game.movables.add(tank);
+		Game.addMovable(tank);
 		Game.eventsOut.add(new EventTankSpawn(tank, parent));
 	}
 
@@ -833,63 +840,21 @@ public class Game
 
 	public static void addObstacle(Obstacle o)
 	{
-		o.removed = false;
-		Game.obstacles.add(o);
-		Game.redrawObstacles.add(o);
-
-		int x = (int) (o.posX / Game.tile_size);
-		int y = (int) (o.posY / Game.tile_size);
-
-		if (x >= 0 && y >= 0 && x < Game.currentSizeX && y < Game.currentSizeY && Game.enable3d)
-			Game.redrawGroundTiles.add(new int[]{x, y});
-
-		if (Game.enable3d && (!Game.fancyTerrain || !Game.enable3dBg))
-		{
-			if (x > 0) Game.redrawGroundTiles.add(new int[]{x - 1, y});
-			if (x < Game.currentSizeX - 1)  Game.redrawGroundTiles.add(new int[]{x + 1, y});
-			if (y > 0) Game.redrawGroundTiles.add(new int[]{x, y - 1});
-			if (y < Game.currentSizeY - 1) Game.redrawGroundTiles.add(new int[]{x, y + 1});
-		}
+		addObstacle(o, true);
 	}
 
-	public static void recomputeHeightGrid()
+	public static void addObstacle(Obstacle o, boolean refresh)
 	{
-		for (int i = 0; i < Game.game.heightGrid.length; i++)
-		{
-			Arrays.fill(Game.game.heightGrid[i], -1000);
-			Arrays.fill(Game.game.groundHeightGrid[i], -1000);
-			Arrays.fill(Game.game.groundEdgeHeightGrid[i], -1000);
-		}
+		o.removed = false;
+		Game.obstacles.add(o);
+		o.postOverride();
+        o.afterAdd();
 
-		for (int i = 0; i < Game.obstacles.size(); i++)
-		{
-			Obstacle o = Game.obstacles.get(i);
+		if (refresh)
+            redraw(o);
 
-			if (o.replaceTiles)
-				o.postOverride();
-
-			int x = (int) (o.posX / Game.tile_size);
-			int y = (int) (o.posY / Game.tile_size);
-
-			if (!(!Game.enable3d || x < 0 || x >= Game.currentSizeX || y < 0 || y >= Game.currentSizeY))
-			{
-				Game.game.heightGrid[x][y] = Math.max(o.getTileHeight(), Game.game.heightGrid[x][y]);
-				Game.game.groundHeightGrid[x][y] = Math.max(o.getGroundHeight(), Game.game.groundHeightGrid[x][y]);
-				Game.game.groundEdgeHeightGrid[x][y] = Math.max(o.getEdgeDrawDepth(), Game.game.groundEdgeHeightGrid[x][y]);
-			}
-		}
-
-		for (int i = 0; i < Game.currentSizeX; i++)
-		{
-			for (int j = 0; j < Game.currentSizeY; j++)
-			{
-				if (Game.game.groundHeightGrid[i][j] <= -1000)
-					Game.game.groundHeightGrid[i][j] = Game.tilesDepth[i][j];
-
-				if (Game.game.groundEdgeHeightGrid[i][j] <= -1000)
-					Game.game.groundEdgeHeightGrid[i][j] = 0;
-			}
-		}
+        for (Obstacle o1 : o.getNeighbors())
+            o1.onNeighborUpdate();
 	}
 
 	public static boolean usernameInvalid(String username)
@@ -948,7 +913,7 @@ public class Game
 
 	public static String formatString(String s)
 	{
-		if (s.length() == 0)
+		if (s.isEmpty())
 			return s;
 		else if (s.length() == 1)
 			return s.toUpperCase();
@@ -990,6 +955,19 @@ public class Game
 
 	public static void exitToCrash(Throwable e)
 	{
+		while (e instanceof GameCrashedException)
+			e = ((GameCrashedException) e).originalException;
+
+		if (Game.game.runningCallbacks)
+			Game.game.callbackException = e;
+
+        e.printStackTrace();
+
+		throw new GameCrashedException(e);
+	}
+
+	protected static void displayCrashScreen(Throwable e)
+	{
 		System.gc();
 
 		e.printStackTrace();
@@ -1004,6 +982,12 @@ public class Game
 
 		ScreenPartyHost.isServer = false;
 		ScreenPartyLobby.isClient = false;
+
+		Game.eventsIn.clear();
+		Game.eventsOut.clear();
+
+        if (Game.steamNetworkHandler.initialized)
+            Game.steamNetworkHandler.leaveParty();
 
 		cleanUp();
 
@@ -1021,10 +1005,10 @@ public class Game
 		}
 
 		Game.crashTime = System.currentTimeMillis();
-		Game.logger.println(new Date().toString() + " (syserr) the game has crashed! below is a crash report, good luck:");
+		Game.logger.println(new Date() + " (syserr) the game has crashed! below is a crash report, good luck:");
 		e.printStackTrace(Game.logger);
 
-		if (!(Game.screen instanceof ScreenCrashed) && !(Game.screen instanceof ScreenOutOfMemory))
+		if (!(Game.screen instanceof ScreenCrashed))
 		{
 			try
 			{
@@ -1036,7 +1020,7 @@ public class Game
 				f.create();
 
 				f.startWriting();
-				f.println("Tanks crash report: " + Game.version + " - " + new Date().toString() + "\n");
+				f.println("Tanks crash report: " + Game.version + " - " + new Date() + "\n");
 
 				f.println(e.toString());
 				for (StackTraceElement el: e.getStackTrace())
@@ -1081,107 +1065,99 @@ public class Game
 	public static void resetTiles()
 	{
 		Drawing.drawing.setScreenBounds(Game.tile_size * 28, Game.tile_size * 18);
+		Chunk.initialize();
 
-		Game.tilesR = new double[28][18];
-		Game.tilesG = new double[28][18];
-		Game.tilesB = new double[28][18];
-		Game.tilesDepth = new double[28][18];
-		Game.tilesFlash = new double[28][18];
-		Game.game.heightGrid = new double[28][18];
-		Game.game.groundHeightGrid = new double[28][18];
-		Game.game.groundEdgeHeightGrid = new double[28][18];
-		Game.tileDrawables = new Obstacle[28][18];
+		Level.currentColor.red = 235;
+		Level.currentColor.green = 207;
+		Level.currentColor.blue = 166;
 
-		double var = 0;
-
-		if (Game.fancyTerrain)
-			var = 20;
-
-		Random tilesRandom = new Random(0);
-		for (int i = 0; i < 28; i++)
-		{
-			for (int j = 0; j < 18; j++)
-			{
-				Game.tilesR[i][j] = (235 + tilesRandom.nextDouble() * var);
-				Game.tilesG[i][j] = (207 + tilesRandom.nextDouble() * var);
-				Game.tilesB[i][j] = (166 + tilesRandom.nextDouble() * var);
-				double rand = tilesRandom.nextDouble() * var / 2;
-				Game.tilesDepth[i][j] = Game.enable3dBg ? rand : 0;
-			}
-		}
-
-		Level.currentColorR = 235;
-		Level.currentColorG = 207;
-		Level.currentColorB = 166;
-
-		Level.currentColorVarR = 20;
-		Level.currentColorVarG = 20;
-		Level.currentColorVarB = 20;
+		Level.currentColorVar.red = 20;
+		Level.currentColorVar.green = 20;
+		Level.currentColorVar.blue = 20;
 
 		Level.currentLightIntensity = 1.0;
 		Level.currentShadowIntensity = 0.75;
 	}
 
-	public static double sampleGroundHeight(double px, double py)
+	public static Obstacle getObstacle(int tileX, int tileY)
 	{
-		int x = (int) (px / Game.tile_size);
-		int y = (int) (py / Game.tile_size);
-
-		if (!Game.enable3dBg || !Game.enable3d || x < 0 || x >= Game.currentSizeX || y < 0 || y >= Game.currentSizeY)
-			return 0;
-		else
-			return Game.tilesDepth[x][y] + 0;
+		Chunk.Tile t = Chunk.getTile(tileX, tileY);
+		return t != null ? t.obstacle() : null;
 	}
 
-	public static double sampleTerrainGroundHeight(double px, double py)
+	public static Obstacle getObstacle(double posX, double posY)
 	{
-		int x = (int) (px / Game.tile_size);
-		int y = (int) (py / Game.tile_size);
+		return getObstacle((int) (posX / Game.tile_size), (int) (posY / Game.tile_size));
+	}
+	public static void removeObstacle(Obstacle o)
+	{
+		Drawing.drawing.terrainRenderer.remove(o);
+		o.removed = true;
+		redraw(o);
+		Chunk.runIfChunkPresent(o.posX, o.posY, chunk -> chunk.removeObstacle(o));
 
-		if (px < 0)
-			x--;
+		if (o.shouldUpdate())
+			Game.obstaclesToUpdate.remove(o);
 
-		if (py < 0)
-			y--;
+		if (o instanceof IAvoidObject)
+			Game.avoidObjects.remove(o);
 
-		double r;
-		if (!Game.fancyTerrain || !Game.enable3d || x < 0 || x >= Game.currentSizeX || y < 0 || y >= Game.currentSizeY)
-			r = 0;
-		else
-			r = Game.game.groundHeightGrid[x][y];
+		for (Obstacle o1: o.getNeighbors())
+			o1.onNeighborUpdate();
 
-		return r;
+		Game.obstacles.remove(o);
+    }
+
+	public static void redraw(Obstacle o)
+	{
+		int x = (int) (o.posX / Game.tile_size);
+		int y = (int) (o.posY / Game.tile_size);
+
+		Game.redrawObstacles.add(o);
+
+		if (x >= 0 && y >= 0 && x < Game.currentSizeX && y < Game.currentSizeY && o.replaceTiles)
+			Game.redrawGroundTiles.add(new GroundTile(x, y));
 	}
 
-	public static double sampleObstacleHeight(double px, double py)
+	public static boolean isTankSolid(double posX, double posY)
 	{
-		int x = (int) (px / Game.tile_size);
-		int y = (int) (py / Game.tile_size);
-
-		if (px < 0)
-			x--;
-
-		if (py < 0)
-			y--;
-
-		double r;
-		if (!Game.fancyTerrain || !Game.enable3d || x < 0 || x >= Game.currentSizeX || y < 0 || y >= Game.currentSizeY)
-			r = 0;
-		else
-			r = Game.game.heightGrid[x][y];
-
-		return r;
+		return isTankSolid((int) (posX / Game.tile_size), (int) (posY / Game.tile_size));
 	}
+
+	public static boolean isTankSolid(int tileX, int tileY)
+	{
+		return Chunk.getIfPresent(tileX, tileY, false, Chunk.Tile::tankSolid);
+	}
+
+	public static boolean isBulletSolid(double posX, double posY)
+	{
+		return isBulletSolid((int) (posX / Game.tile_size), (int) (posY / Game.tile_size));
+	}
+
+	public static boolean isBulletSolid(int tileX, int tileY)
+	{
+		return Chunk.getIfPresent(tileX, tileY, false, Chunk.Tile::bulletSolid);
+	}
+
+	public static double sampleObstacleHeight(double posX, double posY)
+	{
+		return Chunk.getIfPresent(posX, posY, 0d, Chunk.Tile::height);
+	}
+
+    public static double sampleGroundHeight(double px, double py)
+	{
+		return Chunk.getIfPresent(px, py, 0d, Chunk.Tile::groundHeight);
+    }
 
 	public static double sampleEdgeGroundDepth(int x, int y)
 	{
-		double r;
-		if (!Game.enable3d || x < 0 || x >= Game.currentSizeX || y < 0 || y >= Game.currentSizeY)
-			r = 0;
-		else
-			r = Game.game.groundEdgeHeightGrid[x][y];
+		return Chunk.getIfPresent(x, y, 0d, Chunk.Tile::edgeDepth);
+	}
 
-		return r;
+	/** @return The depth that the tile renders with; not affected by obstacles */
+	public static double sampleTerrainGroundHeight(double px, double py)
+	{
+		return Chunk.getIfPresent(px, py, 0d, Chunk.Tile::tileDepth);
 	}
 
 	public static boolean stringsEqual(String a, String b)
@@ -1297,7 +1273,7 @@ public class Game
 	public static void cleanUp()
 	{
 		resetTiles();
-
+		Game.currentLevel = null;
 		silentCleanUp();
 	}
 
@@ -1308,18 +1284,31 @@ public class Game
 		movables.clear();
 		effects.clear();
 		clouds.clear();
+		obstaclesToUpdate.clear();
+		checkObstaclesToUpdate.clear();
+		avoidObjects.clear();
 		recycleEffects.clear();
 		removeEffects.clear();
-		removeTracks.clear();
 		removeClouds.clear();
-		Game.tileDrawables = new Obstacle[Game.currentSizeX][Game.currentSizeY];
+
+        SolidGameObject.addFacesToChunks.clear();
+
+		if (Game.currentLevel != null)
+			Chunk.populateChunks(Game.currentLevel);
+		else
+			Chunk.initialize();
+
+        for (ErrorHandler<?, ?> h: ErrorHandler.errorHandlers)
+			h.reset();
 
 		resetNetworkIDs();
 
 		Game.player.hotbar.coins = 0;
 		Game.player.hotbar.enabledCoins = false;
 		Game.player.hotbar.itemBar = new ItemBar(Game.player);
-		Game.player.hotbar.enabledItemBar = false;
+		Game.player.hotbar.itemBar.showItems = false;
+		Game.player.ownedBuilds = new HashSet<>();
+		Game.player.buildName = "player";
 
 		//if (Game.game.window != null)
 		//	Game.game.window.setShowCursor(false);
@@ -1412,11 +1401,11 @@ public class Game
 
 			if (ia != ib)
 				return ia - ib;
-			else if ((la.toString().length() == 0 || lb.toString().length() == 0) && la.toString().length() + lb.toString().length() > 0)
+			else if ((la.toString().isEmpty() || lb.toString().isEmpty()) && la.toString().length() + lb.toString().length() > 0)
 				return lb.toString().length() - la.toString().length();
 			else if (la.toString().length() != lb.toString().length())
 				return la.toString().length() - lb.toString().length();
-			else if (!la.toString().equals(lb.toString()))
+			else if (!la.toString().contentEquals(lb))
 				return la.toString().compareTo(lb.toString());
 		}
 
@@ -1441,22 +1430,42 @@ public class Game
 		level.loadLevel();
 	}
 
-	public static String readVersionFromFile()
-	{
-		ArrayList<String> version = Game.game.fileManager.getInternalFileContents("/version.txt");
-		if (version == null)
-			return "-1.-1.-1";
-		else
-			return version.get(0);
-	}
+    /** Please use {@link #version Game.version} instead. */
+    public static String readVersionFromFile()
+    {
+        try
+        {
+            return Game.game.fileManager.getInternalFileContents("/version.txt").get(0);
+        }
+        catch (Exception e)
+        {
+            return "Unknown";
+        }
+    }
 
+    /** Please use {@link BaseWindow#buildDate Game.game.window.buildDate} instead. */
 	public static String readHashFromFile()
 	{
-		ArrayList<String> hash = Game.game.fileManager.getInternalFileContents("/hash.txt");
-		if (hash == null)
-			return "-1.-1.-1";
-		else
-			return hash.get(0);
+		try
+        {
+            return Game.game.fileManager.getInternalFileContents("/hash.txt").get(0);
+        }
+        catch (Exception e)
+        {
+            return "";
+        }
 	}
 
+	public static boolean isOrdered(double a, double b, double c)
+	{
+		return (a < b && b < c) || (c < b && b < a);
+	}
+
+	public static boolean isOrdered(boolean orEqualTo, double a, double b, double c)
+	{
+		if (!orEqualTo)
+			return isOrdered(a, b, c);
+
+		return (a <= b && b <= c) || (c <= b && b <= a);
+	}
 }

@@ -1,30 +1,21 @@
 package tanks.gui.screen;
 
 import basewindow.BaseFile;
+import com.codedisaster.steamworks.SteamFriends;
+import com.codedisaster.steamworks.SteamUGCDetails;
 import tanks.Crusade;
 import tanks.Drawing;
 import tanks.Game;
-import tanks.Level;
 import tanks.gui.Button;
-import tanks.gui.ButtonList;
 import tanks.gui.TextBox;
-import tanks.item.Item;
 import tanks.network.event.EventShareCrusade;
 
 import java.io.IOException;
-import java.util.ArrayList;
 
-public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScreen
+public class ScreenCrusadePreview extends Screen implements ICrusadePreviewScreen
 {
-    public enum Mode {options, levels, items}
-
     public Crusade crusade;
-    public Mode mode = Mode.options;
 
-    public ButtonList levelButtons;
-    public ButtonList itemButtons;
-
-    public ScreenCrusadePreview instance = this;
     public Screen previous;
 
     public double titleOffset = -this.objYSpace * 4.5;
@@ -32,9 +23,28 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
     public boolean uploadMode;
 
     public TextBox crusadeName;
+    public TextBox description;
+    public String[] descriptionText;
+
     public boolean downloaded = false;
 
-    public Button upload = new Button(this.centerX, this.centerY + this.objYSpace * 4, this.objWidth, this.objHeight, "Share", new Runnable()
+    public boolean showWaiting = false;
+
+    public boolean showDelete = false;
+    public boolean confirmingDelete = false;
+    public SteamUGCDetails workshopDetails;
+
+    public int votesUp = 0;
+    public int votesDown = 0;
+
+    protected int textOffset = 0;
+    protected int levelsTextOffset = 0;
+
+    protected double offset = 0;
+
+    public DisplayCrusadeLevels background;
+
+    public Button upload = new Button(this.centerX, this.centerY + this.objYSpace * 3, this.objWidth, this.objHeight, "Share", new Runnable()
     {
         @Override
         public void run()
@@ -46,17 +56,22 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
                 e.clientID = Game.clientID;
                 Game.eventsIn.add(e);
             }
-            else
+            else if (ScreenPartyLobby.isClient)
             {
                 Game.screen = new ScreenPartyLobby();
                 Game.eventsOut.add(new EventShareCrusade(crusade, crusade.name));
+            }
+            else
+            {
+                showWaiting = true;
+                Game.steamNetworkHandler.workshop.upload("Crusade", crusadeName.inputText, crusade.contents, description.inputText);
             }
 
             Game.cleanUp();
         }
     });
 
-    public Button download = new Button(this.centerX, this.centerY + this.objYSpace * 4, this.objWidth, this.objHeight, "Download", new Runnable()
+    public Button download = new Button(this.centerX, this.centerY + this.objYSpace * 3, this.objWidth, this.objHeight, "Download", new Runnable()
     {
         @Override
         public void run()
@@ -92,7 +107,7 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
         }
     });
 
-    public Button quit = new Button(this.centerX, this.centerY + this.objYSpace * 5, this.objWidth, this.objHeight, "Back", new Runnable()
+    public Button quit = new Button(this.centerX, this.centerY + this.objYSpace * 4, this.objWidth, this.objHeight, "Back", new Runnable()
     {
         @Override
         public void run()
@@ -102,11 +117,67 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
     }
     );
 
-    public Button options = new Button(this.centerX - this.objXSpace, 60, this.objWidth, this.objHeight, "Overview", () -> mode = Mode.options);
+    public Button lookInside = new Button(this.centerX, this.centerY - this.objYSpace, this.objWidth, this.objHeight, "Look inside", new Runnable()
+    {
+        @Override
+        public void run()
+        {
+            Game.screen = new ScreenCrusadeEditor(crusade, true, Game.screen);
+        }
+    }
+    );
 
-    public Button levels = new Button(this.centerX, 60, this.objWidth, this.objHeight, "Levels", () -> mode = Mode.levels);
+    public Button delete = new Button(this.centerX - this.objXSpace, this.centerY + this.objYSpace * 2, this.objWidth, this.objHeight, "Remove from server", () ->
+    {
+        confirmingDelete = true;
+    });
 
-    public Button items = new Button(this.centerX + this.objXSpace, 60, this.objWidth, this.objHeight, "Shop", () -> mode = Mode.items);
+    public Button more = new Button(this.centerX - this.objXSpace, this.centerY + this.objYSpace * 3, this.objWidth, this.objHeight, "More by this user", () ->
+    {
+        Game.cleanUp();
+        Game.screen = new ScreenWorkshopSearchWaiting();
+        Game.steamNetworkHandler.workshop.search(null, 0, 18, workshopDetails.getOwnerID(), null, Game.steamNetworkHandler.workshop.searchByScore);
+    });
+
+    public Button cancelDelete = new Button(this.centerX, (int) (this.centerY + this.objYSpace), this.objWidth, this.objHeight, "No", () -> { confirmingDelete = false; });
+
+    public Button confirmDelete = new Button(this.centerX, (int) (this.centerY), this.objWidth, this.objHeight, "Yes", () ->
+    {
+        Game.cleanUp();
+        Game.steamNetworkHandler.workshop.delete(workshopDetails, "Crusade");
+        Game.screen = new ScreenWaiting("Removing crusade from server...");
+    }
+    );
+
+    public double votePosY = this.centerY + this.objYSpace * 2.75;
+
+    public Button voteUp = new Button(this.centerX + this.objXSpace - 50, votePosY, this.objHeight, this.objHeight, "\u00A7000200000255+", () ->
+    {
+        if (Game.steamNetworkHandler.workshop.currentDownloadVote == -1)
+            votesDown--;
+
+        votesUp++;
+        Game.steamNetworkHandler.workshop.currentDownloadVote = 1;
+
+        Game.steamNetworkHandler.workshop.workshop.setUserItemVote(workshopDetails.getPublishedFileID(), true);
+    }, "Like the crusade");
+
+    public Button voteDown = new Button(this.centerX + this.objXSpace + 65, votePosY, this.objHeight, this.objHeight, "\u00A7200000000255-", () ->
+    {
+        if (Game.steamNetworkHandler.workshop.currentDownloadVote == 1)
+            votesUp--;
+
+        votesDown++;
+        Game.steamNetworkHandler.workshop.currentDownloadVote = -1;
+
+
+        Game.steamNetworkHandler.workshop.workshop.setUserItemVote(workshopDetails.getPublishedFileID(), false);
+    }, "Dislike the crusade");
+
+    public Button showPage = new Button(this.centerX + this.objXSpace - this.objWidth / 2 + this.objHeight / 2, this.centerY + this.objYSpace * 1.5, this.objHeight, this.objHeight, "", () ->
+    {
+        Game.steamNetworkHandler.friends.friends.activateGameOverlayToWebPage("steam://url/CommunityFilePage/" + Long.parseLong(workshopDetails.getPublishedFileID().toString(), 16), SteamFriends.OverlayToWebPageMode.Default);
+    }, "View crusade page on Steam");
 
     public ScreenCrusadePreview(Crusade c, Screen previous, boolean upload)
     {
@@ -120,31 +191,8 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
 
         this.crusade = c;
 
-        if (Drawing.drawing.interfaceScaleZoom > 1)
-        {
-            this.levelButtons = new ButtonList(new ArrayList<>(), 0, this.centerX - Drawing.drawing.interfaceSizeX / 2, this.centerY - Drawing.drawing.interfaceSizeY / 2);
-            this.itemButtons = new ButtonList(new ArrayList<>(), 0,  this.centerX - Drawing.drawing.interfaceSizeX / 2, this.centerY - Drawing.drawing.interfaceSizeY / 2);
-
-            this.titleOffset = -195;
-
-            this.levelButtons.controlsYOffset = -30;
-            this.itemButtons.controlsYOffset = -30;
-        }
-        else
-        {
-            this.levelButtons = new ButtonList(new ArrayList<>(), 0,  this.centerX - Drawing.drawing.interfaceSizeX / 2, this.centerY - Drawing.drawing.interfaceSizeY / 2 - 30);
-            this.itemButtons = new ButtonList(new ArrayList<>(), 0,  this.centerX - Drawing.drawing.interfaceSizeX / 2, this.centerY - Drawing.drawing.interfaceSizeY / 2 - 30);
-        }
-
-        this.itemButtons.objYSpace = this.objYSpace;
-        this.levelButtons.objYSpace = this.objYSpace;
-
-        this.refreshLevelButtons();
-        this.refreshItemButtons();
-
-        this.levelButtons.indexPrefix = true;
-
-        crusadeName = new TextBox(this.centerX, this.centerY + this.objYSpace * 3, this.objWidth, this.objHeight, "Crusade save name", () ->
+        crusadeName = new TextBox(this.centerX, this.centerY + this.objYSpace * 2, this.objWidth, this.objHeight,
+                !uploadMode ? "Crusade save name" : "Crusade upload name", () ->
         {
             if (crusadeName.inputText.equals(""))
                 crusadeName.inputText = crusadeName.previousInputText;
@@ -155,175 +203,225 @@ public class ScreenCrusadePreview extends Screen implements ICrusadeShopItemScre
         crusadeName.enableCaps = true;
 
         this.updateDownloadButton();
+
+        voteUp.fullInfo = true;
+        voteDown.fullInfo = true;
+
+        showPage.fullInfo = true;
+        showPage.imageSizeX = 30;
+        showPage.imageSizeY = 30;
+        showPage.image = "icons/link.png";
+
+        description = new TextBox(this.centerX, this.centerY + this.objYSpace * 0.5, this.objWidth * 2.5, this.objHeight, "Description", () -> {
+
+        }, "");
+        description.enableCaps = true;
+        description.allowSpaces = true;
+        description.enableSpaces = true;
+        description.enablePunctuation = true;
+        description.maxChars = 150;
+        description.hintText = "Click to add a description...";
+
+        if (upload)
+            this.lookInside.posY = this.description.posY - this.objYSpace * 1.5;
+        else
+            this.lookInside.posY = this.crusadeName.posY - this.objYSpace * 1.5;
+
+        if (Game.previewCrusades)
+            this.background = new DisplayCrusadeLevels(this.crusade);
     }
 
-    public void refreshLevelButtons()
+    public void setOffset(double offset)
     {
-        this.levelButtons.buttons.clear();
-
-        for (int i = 0; i < this.crusade.levels.size(); i++)
-        {
-            int j = i;
-            this.levelButtons.buttons.add(new Button(0, 0, this.objWidth, this.objHeight, this.crusade.levels.get(i).levelName.replace("_", " "), () ->
-            {
-                String level = crusade.levels.get(j).levelString;
-
-                ScreenCrusadePreviewLevel s = new ScreenCrusadePreviewLevel(crusade, level, j, Game.screen);
-                Level l = new Level(level);
-                l.customTanks = crusade.customTanks;
-                l.loadLevel(s);
-                Game.screen = s;
-            }));
-        }
-
-        this.levelButtons.sortButtons();
-    }
-
-    public void refreshItemButtons()
-    {
-        this.itemButtons.buttons.clear();
-
-        for (int i = 0; i < this.crusade.crusadeShopItems.size(); i++)
-        {
-            Button b = new Button(0, 0, this.objWidth, this.objHeight, this.crusade.crusadeShopItems.get(i).itemStack.item.name);
-
-            b.image = crusade.crusadeShopItems.get(i).itemStack.item.icon;
-            b.imageXOffset = - b.sizeX / 2 + b.sizeY / 2 + 10;
-            b.imageSizeX = b.sizeY;
-            b.imageSizeY = b.sizeY;
-
-            int p = crusade.crusadeShopItems.get(i).price;
-
-            if (p == 0)
-                b.setSubtext("Free!");
-            else if (p == 1)
-                b.setSubtext("1 coin");
-            else
-                b.setSubtext("%d coins", p);
-
-            this.itemButtons.buttons.add(b);
-        }
-
-        this.itemButtons.sortButtons();
+        this.offset = offset;
+        this.upload.posY -= offset;
+        this.download.posY -= offset;
+        this.quit.posY -= offset;
+        this.delete.posY -= offset;
+        this.more.posY -= offset;
+        this.showPage.posY -= offset;
+        this.voteDown.posY -= offset;
+        this.voteUp.posY -= offset;
+        this.votePosY -= offset;
+        this.crusadeName.posY -= offset;
+        this.lookInside.posY = this.centerY - this.objYSpace;
     }
 
     @Override
     public void update()
     {
-        options.enabled = mode != Mode.options;
-        levels.enabled = mode != Mode.levels;
-        items.enabled = mode != Mode.items;
-
-        options.update();
-        levels.update();
-        items.update();
-
-        if (mode == Mode.levels)
+        if (showWaiting)
         {
-            levelButtons.update();
-
-            quit.update();
+            Game.screen = new ScreenWaiting("Uploading crusade...");
         }
-        else if (mode == Mode.options)
+
+        if (confirmingDelete)
+        {
+            confirmDelete.update();
+            cancelDelete.update();
+        }
+        else
         {
             quit.update();
+            lookInside.update();
 
             if (uploadMode)
             {
                 upload.update();
+
+                if (!ScreenPartyLobby.isClient && !ScreenPartyHost.isServer)
+                {
+                    crusadeName.update();
+                    description.update();
+                }
             }
             else
             {
                 crusadeName.update();
                 download.update();
             }
-        }
-        else if (mode == Mode.items)
-        {
-            itemButtons.update();
-            quit.update();
+
+            if (workshopDetails != null)
+            {
+                int v = Game.steamNetworkHandler.workshop.currentDownloadVote;
+                voteUp.enabled = v == -1 || v == 0;
+                voteDown.enabled = v == 1 || v == 0;
+
+                voteUp.update();
+                voteDown.update();
+
+                showPage.update();
+
+                if (showDelete)
+                    delete.update();
+
+                more.update();
+            }
         }
     }
 
     @Override
     public void draw()
     {
-        this.drawDefaultBackground();
-
-        double extraHeight = ((Game.game.window.absoluteHeight - Drawing.drawing.statsHeight) / Drawing.drawing.interfaceScale - Drawing.drawing.interfaceSizeY) / 2;
-        double width = Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale;
-
-        Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, -extraHeight / 2, width, extraHeight);
-        Drawing.drawing.fillInterfaceRect(this.centerX, 60, width, 120);
-
-        options.draw();
-        levels.draw();
-        items.draw();
-
-        if (mode == Mode.levels)
+        if (Game.previewCrusades)
         {
-            quit.draw();
-            levelButtons.draw();
+            this.background.draw();
 
-            Drawing.drawing.setInterfaceFontSize(this.titleSize);
-            Drawing.drawing.setColor(0, 0, 0);
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + titleOffset, "Crusade levels");
+            if (!Game.game.window.drawingShadow)
+                Game.game.window.clearDepth();
+
+            double width = 0.7;
+            if (workshopDetails != null)
+                width = 0.85;
+
+            if (!confirmingDelete)
+            {
+                Drawing.drawing.setColor(0, 0, 0, 127);
+                Drawing.drawing.drawPopup(this.centerX, this.centerY, Drawing.drawing.baseInterfaceSizeX * width, this.objYSpace * 11 - offset * 2);
+                Drawing.drawing.setColor(255, 255, 255);
+            }
         }
-        else if (mode == Mode.options)
-        {
-            Drawing.drawing.setInterfaceFontSize(this.textSize * 2);
-            Drawing.drawing.drawInterfaceText(this.centerX, this.centerY - this.objYSpace * 1.5, crusade.name.replace("_", " "));
-            Drawing.drawing.setInterfaceFontSize(this.textSize);
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - this.objYSpace * 0.5, "Levels: %d", crusade.levels.size());
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + this.objYSpace * 0.5, "Starting lives: %d", crusade.startingLives);
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + this.objYSpace * 1, "Bonus life frequency: %d", crusade.bonusLifeFrequency);
+        else
+            this.drawDefaultBackground();
 
+        if (confirmingDelete)
+        {
+            Drawing.drawing.setColor(0, 0, 0, 127);
+            Drawing.drawing.drawPopup(this.centerX, this.centerY, 700, 350);
+
+            confirmDelete.draw();
+            cancelDelete.draw();
+
+            Drawing.drawing.setColor(255, 255, 255);
+
+            Drawing.drawing.setInterfaceFontSize(this.textSize);
+            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - this.objYSpace * 1.5, "Are you sure you want to remove the crusade?");
+        }
+        else
+        {
+            if (Game.previewCrusades)
+                Drawing.drawing.setColor(255, 255, 255);
+            else
+                Drawing.drawing.setColor(0, 0, 0);
+
+            Drawing.drawing.setInterfaceFontSize(this.textSize * 2);
+
+            Drawing.drawing.drawInterfaceText(this.centerX, this.centerY + this.textOffset - this.objYSpace * 3.5 + offset, crusade.name.replace("_", " "));
+
+            Drawing.drawing.setInterfaceFontSize(this.textSize);
+            if (this.descriptionText != null)
+            {
+                double dy = this.centerY + this.textOffset - this.objYSpace * 1 + offset - (this.descriptionText.length - 1) * 0.5 * 30;
+                for (int i = 0; i < this.descriptionText.length; i++)
+                {
+                    Drawing.drawing.drawInterfaceText(this.centerX, dy + i * 30, this.descriptionText[i]);
+                }
+            }
+
+            Drawing.drawing.setInterfaceFontSize(this.textSize);
+            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + this.textOffset + this.levelsTextOffset - this.objYSpace * 2.5 + offset, "Levels: %d", crusade.levels.size());
+
+
+//            Drawing.drawing.setInterfaceFontSize(this.textSize * 2);
+//            Drawing.drawing.drawInterfaceText(this.centerX, this.centerY - this.objYSpace * 1.5, crusade.name.replace("_", " "));
+//            Drawing.drawing.setInterfaceFontSize(this.textSize);
+//            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - this.objYSpace * 0.5, "Levels: %d", crusade.levels.size());
+//            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + this.objYSpace * 0.5, "Starting lives: %d", crusade.startingLives);
+//            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + this.objYSpace * 1, "Bonus life frequency: %d", crusade.bonusLifeFrequency);
+
+            lookInside.draw();
             quit.draw();
 
-            Drawing.drawing.setInterfaceFontSize(this.titleSize);
-            Drawing.drawing.setColor(0, 0, 0);
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + titleOffset, "Crusade details");
+//            Drawing.drawing.setInterfaceFontSize(this.titleSize);
+//            Drawing.drawing.setColor(0, 0, 0);
+//            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + titleOffset, "Crusade details");
 
             if (uploadMode)
             {
                 upload.draw();
+
+                if (!ScreenPartyLobby.isClient && !ScreenPartyHost.isServer)
+                {
+                    crusadeName.draw();
+                    description.draw();
+                }
             }
             else
             {
                 crusadeName.draw();
                 download.draw();
             }
+
+            if (workshopDetails != null)
+            {
+                Drawing.drawing.setColor(0, 0, 0, 127);
+                Drawing.drawing.drawConcentricPopup(this.centerX + this.objXSpace, votePosY, this.objWidth, this.objHeight * 1.75, 5, 20);
+
+                Drawing.drawing.setColor(255, 255, 255);
+                Drawing.drawing.setInterfaceFontSize(this.textSize);
+                Drawing.drawing.drawInterfaceText(this.centerX + this.objXSpace - 120, votePosY, "Vote:");
+
+                Drawing.drawing.setColor(0, 200, 0);
+                Drawing.drawing.drawInterfaceText(voteUp.posX + 30, votePosY, votesUp + "", false);
+
+                Drawing.drawing.setColor(200, 0, 0);
+                Drawing.drawing.drawInterfaceText(voteDown.posX + 30, votePosY, votesDown + "", false);
+
+                voteDown.draw();
+                voteUp.draw();
+
+                showPage.draw();
+
+                if (showDelete)
+                    delete.draw();
+
+                String name = Game.steamNetworkHandler.friends.knownUsernamesByID.get(this.workshopDetails.getOwnerID().getAccountID());
+                if (name != null)
+                    this.more.setText("More by %s", (Object) name);
+
+                more.draw();
+            }
         }
-        else if (mode == Mode.items)
-        {
-            quit.draw();
-            itemButtons.draw();
-
-            Drawing.drawing.setInterfaceFontSize(this.titleSize);
-            Drawing.drawing.setColor(0, 0, 0);
-            Drawing.drawing.displayInterfaceText(this.centerX, this.centerY + titleOffset, "Crusade items");
-        }
-    }
-
-    @Override
-    public void addItem(Item.CrusadeShopItem i)
-    {
-        crusade.crusadeShopItems.add(i);
-        //Game.screen = new ScreenItemEditor(i, instance);
-    }
-
-    @Override
-    public void removeItem(Item.CrusadeShopItem i)
-    {
-        this.crusade.crusadeShopItems.remove(i);
-        this.refreshItemButtons();
-    }
-
-    @Override
-    public void refreshItems()
-    {
-        this.refreshItemButtons();
     }
 
     public void updateDownloadButton()

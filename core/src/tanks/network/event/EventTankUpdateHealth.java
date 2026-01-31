@@ -37,12 +37,18 @@ public class EventTankUpdateHealth extends PersonalEvent
 		double before = t.health;
 		t.health = health;
 
-		if (t.health > 6 && (int) (before) != (int) (t.health))
+		if ((int) (before) != (int) (t.health) && (int) t.health > 0)
 		{
 			Effect e = Effect.createNewEffect(t.posX, t.posY, t.posZ + t.size * 0.75, Effect.EffectType.shield);
 			e.size = t.size;
 			e.radius = t.health - 1;
 			Game.effects.add(e);
+		}
+
+		if (t.health <= 0)
+		{
+			t.vX = 0;
+			t.vY = 0;
 		}
 	}
 

@@ -2,7 +2,6 @@ package tanks.minigames;
 
 import tanks.Game;
 import tanks.Level;
-import tanks.ModAPI;
 import tanks.bullet.Bullet;
 import tanks.gui.screen.*;
 import tanks.tank.Tank;
@@ -24,22 +23,22 @@ public abstract class Minigame extends Level
     public boolean enableKillMessages = false;
     public boolean customLevelEnd = false;
     public boolean hideSpeedrunTimer = false;
+    public boolean forceSpeedrunTimer = false;
     public boolean noLose = false;
     public boolean disableEndMusic = false;
     public boolean customIntroMusic = false;
-    public boolean enableItemBar = false;
+    public boolean showItems = false;
     public boolean flashBackground = false;
+    public boolean removeMusicWhenDead = false;
+    public boolean hideShop = false;
 
     public String name;
 
     public String introMusic;
 
-    /**
-     * If you used getLevelString(), make sure to switch it with the actual level string before publishing it!
-     */
     public Minigame(String levelString)
     {
-        super(levelString);
+        super(levelString, ScreenPartyLobby.isClient);
         for (String s: Game.registryMinigame.minigames.keySet())
         {
             if (Game.registryMinigame.minigames.get(s).equals(this.getClass()))
@@ -50,7 +49,6 @@ public abstract class Minigame extends Level
     @Override
     public void loadLevel()
     {
-        ModAPI.menuGroup.clear();
         ScreenInterlevel.fromMinigames = true;
 
         super.loadLevel();
@@ -90,12 +88,29 @@ public abstract class Minigame extends Level
     }
 
     /**
-     * Draw any HUD things here
+     * Draw anything for the game here
      */
     public void draw()
     {
 
     }
+
+    /**
+     * Draw stuff that needs to be pinned directly to the screen in the hotbar
+     */
+    public void drawHotbar()
+    {
+
+    }
+
+    /**
+     * Draw the circle-style hotbar, affected by angled perspective
+     */
+    public void drawCircleHotbar()
+    {
+
+    }
+
 
     /**
      * Override this method to do something when the level has started to end
@@ -162,28 +177,28 @@ public abstract class Minigame extends Level
 
         if (killed.team != null && killed.team.enableColor)
         {
-            killedR = String.format("%03d", (int) killed.team.teamColorR);
-            killedG = String.format("%03d", (int) killed.team.teamColorG);
-            killedB = String.format("%03d", (int) killed.team.teamColorB);
+            killedR = String.format("%03d", (int) killed.team.teamColor.red);
+            killedG = String.format("%03d", (int) killed.team.teamColor.green);
+            killedB = String.format("%03d", (int) killed.team.teamColor.blue);
         }
         else
         {
-            killedR = String.format("%03d", (int) killed.colorR);
-            killedG = String.format("%03d", (int) killed.colorG);
-            killedB = String.format("%03d", (int) killed.colorB);
+            killedR = String.format("%03d", (int) killed.color.red);
+            killedG = String.format("%03d", (int) killed.color.green);
+            killedB = String.format("%03d", (int) killed.color.blue);
         }
 
         if (killer.team != null && killer.team.enableColor)
         {
-            killR = String.format("%03d", (int) killer.team.teamColorR);
-            killB = String.format("%03d", (int) killer.team.teamColorG);
-            killG = String.format("%03d", (int) killer.team.teamColorB);
+            killR = String.format("%03d", (int) killer.team.teamColor.red);
+            killB = String.format("%03d", (int) killer.team.teamColor.green);
+            killG = String.format("%03d", (int) killer.team.teamColor.blue);
         }
         else
         {
-            killR = String.format("%03d", (int) killer.colorR);
-            killG = String.format("%03d", (int) killer.colorG);
-            killB = String.format("%03d", (int) killer.colorB);
+            killR = String.format("%03d", (int) killer.color.red);
+            killG = String.format("%03d", (int) killer.color.green);
+            killB = String.format("%03d", (int) killer.color.blue);
         }
 
         message.append("\u00a7").append(killedR).append(killedG).append(killedB).append("255");
@@ -250,15 +265,15 @@ public abstract class Minigame extends Level
 
         if (killed.team != null && killed.team.enableColor)
         {
-            killedR = String.format("%03d", (int) killed.team.teamColorR);
-            killedG = String.format("%03d", (int) killed.team.teamColorG);
-            killedB = String.format("%03d", (int) killed.team.teamColorB);
+            killedR = String.format("%03d", (int) killed.team.teamColor.red);
+            killedG = String.format("%03d", (int) killed.team.teamColor.green);
+            killedB = String.format("%03d", (int) killed.team.teamColor.blue);
         }
         else
         {
-            killedR = String.format("%03d", (int) killed.colorR);
-            killedG = String.format("%03d", (int) killed.colorG);
-            killedB = String.format("%03d", (int) killed.colorB);
+            killedR = String.format("%03d", (int) killed.color.red);
+            killedG = String.format("%03d", (int) killed.color.green);
+            killedB = String.format("%03d", (int) killed.color.blue);
         }
 
         message.append("\u00a7").append(killedR).append(killedG).append(killedB).append("255");

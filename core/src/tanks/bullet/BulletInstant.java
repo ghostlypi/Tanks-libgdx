@@ -1,14 +1,15 @@
 package tanks.bullet;
 
+import basewindow.Color;
 import tanks.*;
 import tanks.gui.screen.ScreenGame;
 import tanks.item.ItemBullet;
 import tanks.network.event.EventBulletDestroyed;
 import tanks.network.event.EventBulletInstantWaypoint;
-import tanks.network.event.EventShootBullet;
 import tanks.tank.Tank;
 
 import java.util.ArrayList;
+import java.util.Random;
 
 public class BulletInstant extends Bullet
 {
@@ -42,7 +43,8 @@ public class BulletInstant extends Bullet
 		this.enableExternalCollisions = false;
 		this.playPopSound = false;
 		this.playBounceSound = false;
-		this.effect = BulletEffect.none;
+		this.effect.trailEffects.clear();
+		this.homingSilent = true;
 	}
 
 	public void saveTarget()
@@ -59,14 +61,12 @@ public class BulletInstant extends Bullet
 			if (this.item.item.cooldownBase <= 0)
 				mul = 0.25;
 
-			for (int i = 0; i < this.size * mul * Game.effectMultiplier; i++)
+			for (int i = 0; i < mul * Game.effectMultiplier; i++)
 			{
 				Effect e = Effect.createNewEffect(this.posX, this.posY, this.posZ, Effect.EffectType.piece);
 				double var = 50;
 				e.maxAge /= 2;
-				e.colR = Math.min(255, Math.max(0, this.baseColorR + Math.random() * var - var / 2));
-				e.colG = Math.min(255, Math.max(0, this.baseColorG + Math.random() * var - var / 2));
-				e.colB = Math.min(255, Math.max(0, this.baseColorB + Math.random() * var - var / 2));
+				e.setColorsFromBullet(this, this.baseColor);
 
 				if (Game.enable3d)
 					e.set3dPolarMotion(Math.random() * 2 * Math.PI, Math.random() * Math.PI, Math.random() * this.size / 50.0 * 4);
@@ -93,16 +93,34 @@ public class BulletInstant extends Bullet
 			this.saveTarget();
 		}
 
+		this.affectedByFrameFrequency = false;
+		double angle = this.getPolarDirection();
+		int redirects = 0;
 		while (!this.destroy)
 		{
 			if (ScreenGame.finished)
 				this.destroy = true;
 
-			super.update();
+			if (this.homingSharpness != 0 && GameObject.absoluteAngleBetween(this.getPolarDirection(), angle) >= 0.1)
+			{
+				redirects++;
+				this.collisionX = this.posX;
+				this.collisionY = this.posY;
+				this.collided();
+
+				if (redirects > 100)
+					this.homingSharpness = this.homingSharpness * 0.95;
+
+				angle = this.getPolarDirection();
+			}
+
+			superUpdate();
 
 			if (Math.abs(this.lastFinalVX) < 0.01 && Math.abs(this.lastFinalVY) < 0.01)
 				this.destroy = true;
 		}
+
+        this.affectedByFrameFrequency = true;
 
 		if (!this.tank.isRemote)
 		{
@@ -119,8 +137,11 @@ public class BulletInstant extends Bullet
 		freeIDs.add(this.networkID);
 		idMap.remove(this.networkID);
 
-		if (this.affectsMaxLiveBullets)
+		if (this.affectsMaxLiveBullets && this.reboundSuccessor == null && !this.failedRebound)
 			this.item.liveBullets--;
+
+		if (!this.isRemote)
+			this.onDestroy();
 
 		this.addDestroyEffect();
 		this.expired = true;
@@ -132,7 +153,18 @@ public class BulletInstant extends Bullet
 		if (this.hitStun > 0)
 			this.addElectricEffect();
 
-		this.segments.add(new Laser(this.lastX, this.lastY, this.lastZ, this.collisionX, this.collisionY, this.posZ, this.size / 2, this.getAngleInDirection(this.lastX, this.lastY), this.baseColorR, this.baseColorG, this.baseColorB));
+        Laser l = new Laser(this.lastX, this.lastY, this.lastZ, this.collisionX, this.collisionY, this.posZ, this.size / 2, this.getAngleInDirection(this.lastX, this.lastY), this.baseColor);
+
+        if (this.effect.overrideGlowColor)
+            l.glowColor = this.effect.glowColor;
+
+        l.glowIntensity = this.effect.glowIntensity;
+        l.glows = this.effect.glowIntensity > 0;
+        l.glowSize = this.effect.glowSize;
+        l.glowGlowy = this.effect.glowGlowy;
+        l.luminance = this.effect.luminance;
+
+        this.segments.add(l);
 		this.lastX = this.collisionX;
 		this.lastY = this.collisionY;
 		this.lastZ = this.posZ;
@@ -151,11 +183,11 @@ public class BulletInstant extends Bullet
 		boolean glows = false;
 		double size = 0.25;
 
-		if (Game.fancyBulletTrails)
+		if (Game.bulletTrails)
 		{
 			for (int j = 0; j < 2; j++)
 			{
-				int segs = (int) ((Math.random() * 0.4 + 0.8) * dist / 50);
+				int segs = (int) Math.min(1000, (Math.random() * 0.4 + 0.8) * dist / 50);
 
 				double lX = this.lastX;
 				double lY = this.lastY;
@@ -167,14 +199,14 @@ public class BulletInstant extends Bullet
 					double nX = (1 - frac) * this.lastX + frac * this.collisionX + (Math.random() - 0.5) * 50;
 					double nY = (1 - frac) * this.lastY + frac * this.collisionY + (Math.random() - 0.5) * 50;
 					double nZ = (1 - frac) * this.lastZ + frac * this.posZ + (Math.random() - 0.5) * 30;
-					Laser l = new Laser(lX, lY, lZ, nX, nY, nZ, this.size * size, this.getAngleInDirection(this.lastX, this.lastY), this.outlineColorR, this.outlineColorG, this.outlineColorB);
+					Laser l = new Laser(lX, lY, lZ, nX, nY, nZ, this.size * size, this.getAngleInDirection(this.lastX, this.lastY), this.outlineColor);
 					l.glows = glows;
 					this.segments.add(l);
 					lX = nX;
 					lY = nY;
 					lZ = nZ;
 				}
-				Laser l = new Laser(lX, lY, lZ, this.collisionX, this.collisionY, this.posZ, this.size * size, this.getAngleInDirection(this.lastX, this.lastY), this.outlineColorR, this.outlineColorG, this.outlineColorB);
+				Laser l = new Laser(lX, lY, lZ, this.collisionX, this.collisionY, this.posZ, this.size * size, this.getAngleInDirection(this.lastX, this.lastY), this.outlineColor);
 				l.glows = glows;
 				this.segments.add(l);
 			}
@@ -214,7 +246,7 @@ public class BulletInstant extends Bullet
 			if (i == 0)
 				z = this.iPosZ;
 
-			this.segments.add(new Laser(iX, iY, z, iX + dX, iY + dY, Game.tile_size / 4, this.size / 2, this.getAngleInDirection(iX, iY), this.baseColorR, this.baseColorG, this.baseColorB));
+			this.segments.add(new Laser(iX, iY, z, iX + dX, iY + dY, Game.tile_size / 4, this.size / 2, this.getAngleInDirection(iX, iY), this.baseColor));
 			this.expired = true;
 
 			if (this.hitStun > 0)
@@ -271,9 +303,17 @@ public class BulletInstant extends Bullet
 		}
 	}
 
+	@Override
+	public boolean disableRayCollision()
+	{
+		return true;
+	}
+
 	public void superUpdate()
 	{
+        preUpdate();
 		super.update();
+        postUpdate();
 	}
 
 	public void addTrail(boolean redirect)
@@ -281,11 +321,63 @@ public class BulletInstant extends Bullet
 
 	}
 
-	@Override
-	public void collidedWithObject(Movable m)
-	{
-		this.playPopSound = true;
-		super.collidedWithObject(m);
-		this.playPopSound = false;
-	}
+    public void drawForInterface(double x, double width, double y, double size, ArrayList<Effect> effects, Random r, Color base, Color turret)
+    {
+        double l = 800;
+        double start = x - l / 2;
+        base = this.baseColor;
+
+        Drawing.drawing.setColor(base.red, base.green, base.blue, 255, this.effect.luminance);
+        Drawing.drawing.fillInterfaceOval(start, y, size, size);
+        Drawing.drawing.fillInterfaceOval(start + l, y, size, size);
+        Drawing.drawing.fillInterfaceRect(start + l / 2, y, l, size);
+
+        if (!this.effect.overrideGlowColor)
+            Drawing.drawing.setColor(base.red, base.green, base.blue, 255* this.effect.glowIntensity, this.effect.glowGlowy ? 1 : 0);
+        else
+            Drawing.drawing.setColor(this.effect.glowColor.red, this.effect.glowColor.green, this.effect.glowColor.blue, 255 * this.effect.glowIntensity, this.effect.glowGlowy ? 1 : 0);
+
+        double cr = Drawing.drawing.currentColorR;
+        double cg = Drawing.drawing.currentColorG;
+        double cb = Drawing.drawing.currentColorB;
+        double ca = Drawing.drawing.currentColorA;
+        double mul = this.effect.glowSize;
+
+        size /= 2;
+        Game.game.window.shapeRenderer.setBatchMode(true, false, false, this.effect.glowGlowy);
+        for (int i = 10; i < 30; i++)
+        {
+            Drawing.drawing.setColor(cr, cg, cb, 0, this.effect.glowGlowy ? 1 : 0);
+            Drawing.drawing.addInterfaceVertex(start + mul * Math.cos(i / 20.0 * Math.PI) * size, y + mul * Math.sin(i / 20.0 * Math.PI) * size, 0);
+            Drawing.drawing.addInterfaceVertex(start + mul * Math.cos((i + 1) / 20.0 * Math.PI) * size, y + mul * Math.sin((i + 1) / 20.0 * Math.PI) * size, 0);
+            Drawing.drawing.setColor(cr, cg, cb, ca, this.effect.glowGlowy ? 1 : 0);
+            Drawing.drawing.addInterfaceVertex(start, y, 0);
+
+            Drawing.drawing.setColor(cr, cg, cb, 0, 1);
+            Drawing.drawing.addInterfaceVertex(start + l + mul * Math.cos((i + 20) / 20.0 * Math.PI) * size, y + mul * Math.sin((i + 20) / 20.0 * Math.PI) * size, 0);
+            Drawing.drawing.addInterfaceVertex(start + l + mul * Math.cos((i + 21) / 20.0 * Math.PI) * size, y + mul * Math.sin((i + 21) / 20.0 * Math.PI) * size, 0);
+            Drawing.drawing.setColor(cr, cg, cb, ca, this.effect.glowGlowy ? 1 : 0);
+            Drawing.drawing.addInterfaceVertex(start + l, y, 0);
+        }
+        Game.game.window.shapeRenderer.setBatchMode(false, false, false, this.effect.glowGlowy);
+
+        Game.game.window.shapeRenderer.setBatchMode(true, true, false, this.effect.glowGlowy);
+
+        Drawing.drawing.setColor(cr, cg, cb, 0, this.effect.glowGlowy ? 1 : 0);
+        Drawing.drawing.addInterfaceVertex(start, y + mul * size, 0);
+        Drawing.drawing.addInterfaceVertex(start + l, y + mul * size, 0);
+        Drawing.drawing.setColor(cr, cg, cb, ca, this.effect.glowGlowy ? 1 : 0);
+        Drawing.drawing.addInterfaceVertex(start + l, y, 0);
+        Drawing.drawing.addInterfaceVertex(start, y, 0);
+
+        Drawing.drawing.addInterfaceVertex(start + l, y, 0);
+        Drawing.drawing.addInterfaceVertex(start, y, 0);
+        Drawing.drawing.setColor(cr, cg, cb, 0, this.effect.glowGlowy ? 1 : 0);
+        Drawing.drawing.addInterfaceVertex(start, y - mul * size, 0);
+        Drawing.drawing.addInterfaceVertex(start + l, y - mul * size, 0);
+
+
+        Game.game.window.shapeRenderer.setBatchMode(false, true, false, this.effect.glowGlowy);
+
+    }
 }

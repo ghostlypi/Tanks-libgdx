@@ -1,8 +1,10 @@
 package tanks.gui.screen;
 
-import tanks.*;
+import tanks.Crusade;
+import tanks.Drawing;
+import tanks.Game;
+import tanks.Level;
 import tanks.gui.Button;
-import tanks.obstacle.Obstacle;
 import tanks.tank.TankSpawnMarker;
 
 import java.util.ArrayList;
@@ -36,8 +38,7 @@ public class ScreenCrusadePreviewLevel extends Screen implements ILevelPreviewSc
             String level = crusade.levels.get(index + 1).levelString;
 
             ScreenCrusadePreviewLevel s = new ScreenCrusadePreviewLevel(crusade, level, index + 1, previous);
-            Level l = new Level(level);
-            l.customTanks = crusade.customTanks;
+            Level l = new Level(level, crusade.customTanks);
             l.loadLevel(s);
             Game.screen = s;
         }
@@ -53,18 +54,22 @@ public class ScreenCrusadePreviewLevel extends Screen implements ILevelPreviewSc
             String level = crusade.levels.get(index - 1).levelString;
 
             ScreenCrusadePreviewLevel s = new ScreenCrusadePreviewLevel(crusade, level, index - 1, previous);
-            Level l = new Level(level);
-            l.customTanks = crusade.customTanks;
+            Level l = new Level(level, crusade.customTanks);
             l.loadLevel(s);
             Game.screen = s;
         }
     });
 
-
-
     public ScreenCrusadePreviewLevel(Crusade crusade, String level, int index, Screen s)
     {
         super(350, 40, 380, 60);
+
+        if (!(ScreenPartyHost.isServer || ScreenPartyLobby.isClient))
+        {
+            prev.posY += 40;
+            back.posY += 40;
+            next.posY += 40;
+        }
 
         this.levelDisplay = new DisplayLevel();
 
@@ -95,16 +100,29 @@ public class ScreenCrusadePreviewLevel extends Screen implements ILevelPreviewSc
     public void update()
     {
         this.back.update();
-        this.next.update();
-        this.prev.update();
-
-        if (Game.enable3d)
-            Game.recomputeHeightGrid();
 
         if (Game.game.input.editorPause.isValid())
         {
             back.function.run();
             Game.game.input.editorPause.invalidate();
+        }
+
+        if (Game.game.window.validScrollUp)
+        {
+            Game.game.window.validScrollUp = false;
+            if (this.prev.enabled)
+                this.prev.function.run();
+        }
+        else if (Game.game.window.validScrollDown)
+        {
+            Game.game.window.validScrollDown = false;
+            if (this.next.enabled)
+                this.next.function.run();
+        }
+        else
+        {
+            this.next.update();
+            this.prev.update();
         }
     }
 

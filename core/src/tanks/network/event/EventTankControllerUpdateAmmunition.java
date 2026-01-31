@@ -3,6 +3,7 @@ package tanks.network.event;
 import io.netty.buffer.ByteBuf;
 import tanks.Game;
 import tanks.network.NetworkUtils;
+import tanks.tank.TankPlayerController;
 
 import java.util.UUID;
 
@@ -15,13 +16,15 @@ public class EventTankControllerUpdateAmmunition extends PersonalEvent
     public int action2Max;
     public double cooldown;
     public double cooldownBase;
+    public double cooldown2;
+    public double cooldownBase2;
 
     public EventTankControllerUpdateAmmunition()
     {
 
     }
 
-    public EventTankControllerUpdateAmmunition(UUID clientID, int a1, int a1max, int a2, int a2max, double cooldown, double cooldownBase)
+    public EventTankControllerUpdateAmmunition(UUID clientID, int a1, int a1max, int a2, int a2max, double cooldown, double cooldownBase, double cooldown2, double cooldownBase2)
     {
         this.clientIdTarget = clientID;
         this.action1Live = a1;
@@ -30,6 +33,8 @@ public class EventTankControllerUpdateAmmunition extends PersonalEvent
         this.action2Max = a2max;
         this.cooldown = cooldown;
         this.cooldownBase = cooldownBase;
+        this.cooldown2 = cooldown2;
+        this.cooldownBase2 = cooldownBase2;
     }
 
     @Override
@@ -42,6 +47,8 @@ public class EventTankControllerUpdateAmmunition extends PersonalEvent
         b.writeInt(this.action2Max);
         b.writeDouble(this.cooldown);
         b.writeDouble(this.cooldownBase);
+        b.writeDouble(this.cooldown2);
+        b.writeDouble(this.cooldownBase2);
     }
 
     @Override
@@ -54,19 +61,24 @@ public class EventTankControllerUpdateAmmunition extends PersonalEvent
         this.action2Max = b.readInt();
         this.cooldown = b.readDouble();
         this.cooldownBase = b.readDouble();
+        this.cooldown2 = b.readDouble();
+        this.cooldownBase2 = b.readDouble();
     }
 
     @Override
     public void execute()
     {
-        if (this.clientID == null && clientIdTarget.equals(Game.clientID))
+        if (this.clientID == null && clientIdTarget.equals(Game.clientID) && Game.playerTank instanceof TankPlayerController)
         {
-            Game.playerTank.bulletItem.liveBullets = action1Live;
-            Game.playerTank.bullet.maxLiveBullets = action1Max;
-            Game.playerTank.mineItem.liveMines = action2Live;
-            Game.playerTank.mine.maxLiveMines = action2Max;
-            Game.playerTank.bulletItem.item.cooldownBase = cooldownBase;
-            Game.playerTank.bulletItem.cooldown = cooldown;
+            TankPlayerController c = (TankPlayerController) Game.playerTank;
+            c.liveBullets = action1Live;
+            c.maxLiveBullets = action1Max;
+            c.liveMines = action2Live;
+            c.maxLiveMines = action2Max;
+            c.bulletCooldownBase = cooldownBase;
+            c.bulletCooldown = cooldown;
+            c.mineCooldownBase = cooldownBase2;
+            c.mineCooldown = cooldown2;
         }
     }
 }

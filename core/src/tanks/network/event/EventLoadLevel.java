@@ -6,9 +6,13 @@ import tanks.Game;
 import tanks.Level;
 import tanks.gui.screen.ScreenFailedToLoadLevel;
 import tanks.gui.screen.ScreenPartyLobby;
+import tanks.item.Item;
 import tanks.minigames.Minigame;
 import tanks.network.NetworkUtils;
 import tanks.tank.TankAIControlled;
+import tanks.tank.TankPlayer;
+
+import java.util.ArrayList;
 
 public class EventLoadLevel extends PersonalEvent
 {
@@ -33,6 +37,20 @@ public class EventLoadLevel extends PersonalEvent
 			for (TankAIControlled t : l.customTanks)
 			{
 				s.append(t.toString()).append("\n");
+			}
+
+			s.append("shop\n");
+
+			for (Item.ShopItem i: Crusade.currentCrusade.getShop())
+			{
+				s.append(i.toString()).append("\n");
+			}
+
+			s.append("builds\n");
+
+			for (TankPlayer.ShopTankBuild i: Crusade.currentCrusade.getBuildsShop())
+			{
+				s.append(i.toString()).append("\n");
 			}
 
 			s.append("level\n");
@@ -65,11 +83,10 @@ public class EventLoadLevel extends PersonalEvent
 			if (level.startsWith("minigame="))
 				Game.currentLevel = Game.registryMinigame.minigames.get(level.substring(level.indexOf("=") + 1)).getConstructor().newInstance();
 			else
-				Game.currentLevel = new Level(level);
+				Game.currentLevel = new Level(level, new ArrayList<>(), true, disableFriendlyFire);
 
 			Game.currentLevel.startTime = startTime;
-			Game.currentLevel.disableFriendlyFire = disableFriendlyFire;
-			Game.currentLevel.loadLevel(true);
+			Game.currentLevel.loadLevel();
 		}
 		catch (Exception e)
 		{

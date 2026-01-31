@@ -1,6 +1,8 @@
 package tanks.network.event;
 
+import basewindow.Color;
 import io.netty.buffer.ByteBuf;
+import tanks.Crusade;
 import tanks.Game;
 import tanks.Player;
 import tanks.Team;
@@ -8,6 +10,8 @@ import tanks.gui.screen.ScreenGame;
 import tanks.gui.screen.ScreenPartyHost;
 import tanks.gui.screen.ScreenPartyLobby;
 import tanks.minigames.Arcade;
+import tanks.minigames.RampageTrial;
+import tanks.network.ConnectedPlayer;
 import tanks.network.NetworkUtils;
 import tanks.tank.*;
 
@@ -24,17 +28,9 @@ public class EventTankPlayerCreate extends PersonalEvent
 	public double angle;
 	public String team;
 
-	public int colorR;
-	public int colorG;
-	public int colorB;
-
-	public int colorR2;
-	public int colorG2;
-	public int colorB2;
-
-	public int colorR3;
-	public int colorG3;
-	public int colorB3;
+	public Color color = new Color();
+	public Color color2 = new Color();
+	public Color color3 = new Color();
 
 	public int networkID;
 
@@ -66,17 +62,9 @@ public class EventTankPlayerCreate extends PersonalEvent
 
 		this.username = p.username;
 
-		this.colorR = p.colorR;
-		this.colorG = p.colorG;
-		this.colorB = p.colorB;
-
-		this.colorR2 = p.colorR2;
-		this.colorG2 = p.colorG2;
-		this.colorB2 = p.colorB2;
-
-		this.colorR3 = p.colorR3;
-		this.colorG3 = p.colorG3;
-		this.colorB3 = p.colorB3;
+		this.color.set(p.color);
+		this.color2.set(p.color2);
+		this.color3.set(p.color3);
 	}
 	
 	@Override
@@ -92,14 +80,23 @@ public class EventTankPlayerCreate extends PersonalEvent
 		else if (ScreenPartyLobby.isClient)
 			ScreenPartyLobby.includedPlayers.add(this.clientIdTarget);
 
-		if (clientIdTarget.equals(Game.clientID))
+		if (player != null && player.isBot)
+		{
+			t = new TankPlayerBot(posX, posY, angle, player);
+			Game.currentLevel.playerBuilds.get(0).clonePropertiesTo((TankPlayerBot) t);
+		}
+		else if (clientIdTarget.equals(Game.clientID))
 		{
 			if (!ScreenPartyLobby.isClient)
 				t = new TankPlayer(posX, posY, angle);
 			else
 				t = new TankPlayerController(posX, posY, angle, clientIdTarget);
 
-			Game.playerTank = t;
+			Game.playerTank = (TankPlayer) t;
+			Game.player.tank = t;
+
+			if (!Crusade.crusadeMode)
+				Game.player.buildName = Game.currentLevel.playerBuilds.get(0).name;
 		}
 		else
 		{
@@ -107,6 +104,8 @@ public class EventTankPlayerCreate extends PersonalEvent
 			{
 				TankPlayer t2 = new TankPlayer(posX, posY, angle);
 				t2.player = new Player(clientIdTarget, "");
+				setColor(t2);
+				t2.saveColors();
 				t = new TankRemote(t2);
 			}
 			else
@@ -115,12 +114,23 @@ public class EventTankPlayerCreate extends PersonalEvent
 				((TankPlayerRemote) t).refreshAmmo();
 			}
 
+            t.hasName = true;
 			t.showName = true;
 			t.nameTag.name = this.username;
 
 			if (Game.enableChatFilter)
 				t.nameTag.name = Game.chatFilter.filterChat(t.nameTag.name);
 		}
+
+		if (t instanceof TankPlayable)
+		{
+			setColor(t);
+
+            if (clientIdTarget.equals(Game.clientID))
+			    Game.currentLevel.playerBuilds.get(0).clonePropertiesTo((TankPlayable) t);
+		}
+		else if (t instanceof TankPlayerBot)
+			setColor(t);
 
 		if (team.equals("**"))
 			t.team = Game.playerTeam;
@@ -131,27 +141,44 @@ public class EventTankPlayerCreate extends PersonalEvent
 		else
 			t.team = Game.currentLevel.teamsMap.get(team);
 
-		t.colorR = this.colorR;
-		t.colorG = this.colorG;
-		t.colorB = this.colorB;
+		if (player != null)
+			player.tank = t;
 
-		t.secondaryColorR = this.colorR2;
-		t.secondaryColorG = this.colorG2;
-		t.secondaryColorB = this.colorB2;
+		if (ScreenPartyLobby.isClient)
+		{
+			for (ConnectedPlayer c: ScreenPartyLobby.connections)
+			{
+				if (c.clientId.equals(clientIdTarget))
+				{
+					if (t.team != null && t.team.enableColor)
+						c.teamColor.set(t.team.teamColor);
+					else
+						c.teamColor.set(255, 255, 255);
+				}
+			}
 
-		t.enableTertiaryColor = true;
-		t.tertiaryColorR = this.colorR3;
-		t.tertiaryColorG = this.colorG3;
-		t.tertiaryColorB = this.colorB3;
+            t.name = clientIdTarget.toString();
+		}
 
 		t.drawAge = this.drawAge;
 
 		t.setNetworkID(this.networkID);
 
-		if (Game.currentLevel instanceof Arcade && Game.screen instanceof ScreenGame && ((ScreenGame) Game.screen).playing)
+		if ((Game.currentLevel instanceof Arcade || Game.currentLevel instanceof RampageTrial) && Game.screen instanceof ScreenGame && ((ScreenGame) Game.screen).playing)
 			t.invulnerabilityTimer = 250;
 
-		Game.movables.add(t);
+		Game.addMovable(t);
+	}
+
+	public void setColor(Tank t)
+	{
+		t.color.set(this.color);
+		t.secondaryColor.set(this.color2);
+		t.tertiaryColor.set(this.color3);
+		t.emblemColor.set(this.color2);
+
+		if (t instanceof TankPlayable)
+			((TankPlayable) t).saveColors();
 	}
 
 	@Override
@@ -165,15 +192,9 @@ public class EventTankPlayerCreate extends PersonalEvent
 		NetworkUtils.writeString(b, this.team);
 		b.writeInt(this.networkID);
 
-		b.writeInt(this.colorR);
-		b.writeInt(this.colorG);
-		b.writeInt(this.colorB);
-		b.writeInt(this.colorR2);
-		b.writeInt(this.colorG2);
-		b.writeInt(this.colorB2);
-		b.writeInt(this.colorR3);
-		b.writeInt(this.colorG3);
-		b.writeInt(this.colorB3);
+		NetworkUtils.writeColor(b, this.color);
+		NetworkUtils.writeColor(b, this.color2);
+		NetworkUtils.writeColor(b, this.color3);
 
 		b.writeDouble(this.drawAge);
 	}
@@ -189,15 +210,9 @@ public class EventTankPlayerCreate extends PersonalEvent
 		this.team = NetworkUtils.readString(b);
 		this.networkID = b.readInt();
 
-		this.colorR = b.readInt();
-		this.colorG = b.readInt();
-		this.colorB = b.readInt();
-		this.colorR2 = b.readInt();
-		this.colorG2 = b.readInt();
-		this.colorB2 = b.readInt();
-		this.colorR3 = b.readInt();
-		this.colorG3 = b.readInt();
-		this.colorB3 = b.readInt();
+		NetworkUtils.readColor(b, this.color);
+		NetworkUtils.readColor(b, this.color2);
+		NetworkUtils.readColor(b, this.color3);
 
 		this.drawAge = b.readDouble();
 	}

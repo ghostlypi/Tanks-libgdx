@@ -6,8 +6,12 @@ import tanks.Game;
 import tanks.gui.Button;
 import tanks.gui.ButtonList;
 import tanks.gui.Selector;
-import tanks.gui.screen.*;
+import tanks.gui.screen.IConditionalOverlayScreen;
+import tanks.gui.screen.Screen;
+import tanks.gui.screen.ScreenAddSavedItem;
+import tanks.gui.screen.ScreenEditorItem;
 import tanks.item.Item;
+import tanks.item.ItemIcon;
 import tanks.registry.RegistryItem;
 import tanks.tankson.MonitoredArrayListIndexPointer;
 
@@ -47,13 +51,13 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
         this.load();
 
         String[] itemNames = new String[Game.registryItem.itemEntries.size()];
-        String[] itemImages = new String[Game.registryItem.itemEntries.size()];
+        ItemIcon[] itemImages = new ItemIcon[Game.registryItem.itemEntries.size()];
 
         for (int i = 0; i < Game.registryItem.itemEntries.size(); i++)
         {
             RegistryItem.ItemEntry r = Game.registryItem.getEntry(i);
             itemNames[i] = r.name;
-            itemImages[i] = r.image;
+            itemImages[i] = r.icon;
         }
 
         itemSelector = new Selector(0, 0, 0, 0, "item type", itemNames, () ->
@@ -61,7 +65,7 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
             Consumer<Item.ItemStack<?>> addItem = (Item.ItemStack<?> i) ->
             {
                 screenLevelEditor.level.startingItems.add(i);
-                ScreenEditorItem s = new ScreenEditorItem(new MonitoredArrayListIndexPointer<>(screenLevelEditor.level.startingItems, screenLevelEditor.level.startingItems.size() - 1, false, this::refreshItems), this);
+                ScreenEditorItem s = new ScreenEditorItem(new MonitoredArrayListIndexPointer<>((Class<Item.ItemStack<?>>)(Class<?>) Item.ItemStack.class, screenLevelEditor.level.startingItems, screenLevelEditor.level.startingItems.size() - 1, false, this::refreshItems), this);
                 s.onComplete = this::refreshItems;
                 Game.screen = s;
             };
@@ -69,7 +73,7 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
             Game.screen = new ScreenAddSavedItem(this, addItem, Game.formatString(itemSelector.options[itemSelector.selectedOption]), Game.registryItem.getEntry(itemSelector.selectedOption).item);
         });
 
-        itemSelector.images = itemImages;
+        itemSelector.itemIcons = itemImages;
         itemSelector.quick = true;
     }
 
@@ -81,7 +85,7 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
 
         startingItemsList.reorderBehavior = (i, j) ->
         {
-            screenLevelEditor.level.startingItems.add(j, screenLevelEditor.level.startingItems.remove((int)i));
+            editor.level.startingItems.add(j, editor.level.startingItems.remove((int)i));
             this.refreshItems();
         };
 
@@ -106,8 +110,7 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
             return;
 
         Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1200, 720);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 1180, 700);
+        Drawing.drawing.drawPopup(this.centerX, this.centerY, 1200, 720);
 
         Drawing.drawing.setColor(255, 255, 255);
         Drawing.drawing.setInterfaceFontSize(this.titleSize);
@@ -124,6 +127,17 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
         this.back.draw();
         this.addItem.draw();
 
+        for (int i = Math.min((this.startingItemsList.page + 1) * this.startingItemsList.rows * this.startingItemsList.columns, startingItemsList.buttons.size()) - 1; i >= this.startingItemsList.page * this.startingItemsList.rows * this.startingItemsList.columns; i--)
+        {
+            Button b = this.startingItemsList.buttons.get(i);
+            Drawing.drawing.setColor(0, 0, 0);
+            Drawing.drawing.setInterfaceFontSize(this.textSize / 2);
+            int ss = editor.level.startingItems.get(i).stackSize;
+
+            if (ss > 0)
+                Drawing.drawing.drawInterfaceText(b.posX - b.sizeX / 2 + b.sizeY, b.posY + b.sizeY * 0.325, "x" + ss, false);
+        }
+
         if (this.startingItemsList.reorder)
             this.reorderItems.setText("Stop reordering");
         else
@@ -135,7 +149,7 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
     public void refreshItems()
     {
         ButtonList buttons = this.startingItemsList;
-        ArrayList<Item.ItemStack<?>> items = screenLevelEditor.level.startingItems;
+        ArrayList<Item.ItemStack<?>> items = editor.level.startingItems;
 
         buttons.buttons.clear();
 
@@ -145,12 +159,12 @@ public class OverlayStartingItems extends ScreenLevelEditorOverlay implements IC
 
             Button b = new Button(0, 0, 350, 40, items.get(i).item.name, () ->
             {
-                ScreenEditorItem s = new ScreenEditorItem(new MonitoredArrayListIndexPointer<>(screenLevelEditor.level.startingItems, j, false, this::refreshItems), Game.screen);
+                ScreenEditorItem s = new ScreenEditorItem(new MonitoredArrayListIndexPointer<>((Class<Item.ItemStack<?>>)(Class<?>) Item.ItemStack.class, editor.level.startingItems, j, false, this::refreshItems), Game.screen);
                 s.onComplete = this::refreshItems;
                 Game.screen = s;
             });
 
-            b.image = items.get(j).item.icon;
+            b.itemIcon = items.get(j).item.icon;
             b.imageXOffset = - b.sizeX / 2 + b.sizeY / 2 + 10;
             b.imageSizeX = b.sizeY;
             b.imageSizeY = b.sizeY;

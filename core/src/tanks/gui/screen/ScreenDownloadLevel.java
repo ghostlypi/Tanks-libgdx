@@ -1,7 +1,8 @@
 package tanks.gui.screen;
 
 import basewindow.BaseFile;
-import tanks.*;
+import tanks.Drawing;
+import tanks.Game;
 import tanks.gui.Button;
 import tanks.gui.TextBox;
 import tanks.obstacle.Obstacle;
@@ -83,9 +84,6 @@ public class ScreenDownloadLevel extends ScreenOnline implements ILevelPreviewSc
 
         if (!this.downloaded)
             this.levelName.update();
-
-        if (Game.enable3d)
-            Game.recomputeHeightGrid();
     }
 
     @Override

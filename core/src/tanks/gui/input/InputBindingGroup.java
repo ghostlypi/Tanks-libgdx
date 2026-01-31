@@ -15,7 +15,7 @@ public class InputBindingGroup
         this.input1 = i1;
         this.input2 = i2;
 
-        Game.game.inputBindings.add(this);
+        Game.game.inputBindings.put(name, this);
     }
 
     public InputBindingGroup(String name, InputBinding i1)
@@ -24,7 +24,7 @@ public class InputBindingGroup
         this.input1 = i1;
         this.input2 = new InputBinding();
 
-        Game.game.inputBindings.add(this);
+        Game.game.inputBindings.put(name, this);
     }
 
     public boolean isPressed()
@@ -37,10 +37,21 @@ public class InputBindingGroup
         return input1.isValid() || input2.isValid();
     }
 
+    public boolean doubleValid()
+    {
+        return input1.doubleValid() || input2.doubleValid();
+    }
+
     public void invalidate()
     {
         input1.invalidate();
         input2.invalidate();
+    }
+
+    public void unpress()
+    {
+        input1.unpress();
+        input2.unpress();
     }
 
     @Override
@@ -53,13 +64,12 @@ public class InputBindingGroup
     {
         if (input2.inputType == null)
             return input1.getInputName();
-        else if (input1.inputType == null)
+        if (input1.inputType == null)
             return input2.getInputName();
-        else if ((input1.getInputName().startsWith("Left") && input2.getInputName().startsWith("Right")) ||
+        if ((input1.getInputName().startsWith("Left") && input2.getInputName().startsWith("Right")) ||
                 (input2.getInputName().startsWith("Left") && input1.getInputName().startsWith("Right")))
             return Game.formatString(input1.getInputName().replace("Left ", "").replace("Right ", ""));
-        else
-            return Translation.translate("%s or %s", Translation.translate(input1.getInputName()), Translation.translate(input2.getInputName()));
+        return Translation.translate("%s or %s", Translation.translate(input1.getInputName()), Translation.translate(input2.getInputName()));
     }
 
     public void reset()

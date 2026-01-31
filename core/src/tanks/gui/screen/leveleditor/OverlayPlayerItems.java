@@ -10,29 +10,30 @@ public class OverlayPlayerItems extends ScreenLevelEditorOverlay
 {
     public TextBox editCoins;
 
-    public Button editShop = new Button(this.centerX, this.centerY - this.objYSpace / 2, this.objWidth, this.objHeight, "Shop", () -> Game.screen = new OverlayShop(Game.screen, screenLevelEditor));
+    public Button editShop = new Button(this.centerX, this.centerY - this.objYSpace / 2, this.objWidth, this.objHeight, "Shop", () -> Game.screen = new OverlayShop(Game.screen, editor));
 
-    public Button editStartingItems = new Button(this.centerX, this.centerY + this.objYSpace / 2, this.objWidth, this.objHeight, "Starting items", () -> Game.screen = new OverlayStartingItems(Game.screen, screenLevelEditor));
+    public Button editStartingItems = new Button(this.centerX, this.centerY + this.objYSpace / 2, this.objWidth, this.objHeight, "Starting items", () -> Game.screen = new OverlayStartingItems(Game.screen, editor));
 
     public Button back = new Button(this.centerX, this.centerY + this.objYSpace * 2, this.objWidth, this.objHeight, "Back", this::escape);
 
-    public OverlayPlayerItems(Screen previous, ScreenLevelEditor screenLevelEditor)
+    public OverlayPlayerItems(Screen previous, ScreenLevelEditor editor)
     {
-        super(previous, screenLevelEditor);
+        super(previous, editor);
 
         editCoins = new TextBox(this.centerX, this.centerY - this.objYSpace * 1.5, this.objWidth, this.objHeight, "Starting coins", () ->
         {
-            if (editCoins.inputText.length() <= 0)
+            if (editCoins.inputText.isEmpty())
                 editCoins.inputText = "0";
 
-            screenLevelEditor.level.startingCoins = Integer.parseInt(editCoins.inputText);
+            editor.level.startingCoins = Integer.parseInt(editCoins.inputText);
         }
-                ,  screenLevelEditor.level.startingCoins + "");
+                ,  editor.level.startingCoins + "");
 
         editCoins.allowLetters = false;
         editCoins.allowSpaces = false;
         editCoins.maxChars = 9;
         editCoins.checkMaxValue = true;
+        editor.modified = true;
     }
 
     public void update()
@@ -50,8 +51,11 @@ public class OverlayPlayerItems extends ScreenLevelEditorOverlay
         super.draw();
 
         Drawing.drawing.setColor(0, 0, 0, 127);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 800, 550);
-        Drawing.drawing.fillInterfaceRect(this.centerX, this.centerY, 780, 530);
+        int sX = (int) (800 * this.objWidth / 350);
+        int sY = (int) Math.min(700, 550 * this.objHeight / 40);
+
+        Drawing.drawing.setColor(0, 0, 0, 127);
+        Drawing.drawing.drawPopup(this.centerX, this.centerY - (Drawing.drawing.interfaceScaleZoom <= 1 ? 20 : 0), sX, sY);
 
         Drawing.drawing.setColor(255, 255, 255);
         Drawing.drawing.setInterfaceFontSize(this.titleSize);

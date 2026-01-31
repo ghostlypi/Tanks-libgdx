@@ -9,11 +9,15 @@ import com.badlogic.gdx.Gdx;
 import libgdxwindow.LibGDXAsyncMiniAudioSoundPlayer;
 import libgdxwindow.LibGDXFileManager;
 import libgdxwindow.LibGDXWindow;
-import tanks.Game;
-import tanks.GameDrawer;
-import tanks.GameUpdater;
-import tanks.GameWindowHandler;
+import tanks.*;
 import tanks.gui.screen.ScreenExit;
+
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.Scanner;
 
 public class Tanks extends ApplicationAdapter
 {
@@ -33,14 +37,23 @@ public class Tanks extends ApplicationAdapter
 
 	public static void initialize()
 	{
-		Game.debug = true;
-		window = new LibGDXWindow("Tanks", 1400, 900, 1000, new GameUpdater(), new GameDrawer(), new GameWindowHandler(), false, true);
+//        try
+        {
+            window = new LibGDXWindow("Tanks", 1400, 900, 1000, new GameUpdater(), new GameDrawer(), new GameWindowHandler(), false, true);
 
-		window.appType = appType;
-		Game.game.fileManager = new LibGDXFileManager();
-		Game.framework = Game.Framework.libgdx;
-		Game.initScript();
-		Game.game.window = window;
+            window.appType = appType;
+            Game.game.fileManager = new LibGDXFileManager();
+            Game.framework = Game.Framework.libgdx;
+            Game.initScript();
+            Game.game.window = window;
+        }
+//        catch (Exception e)
+//        {
+//            if (e instanceof GameCrashedException)
+//                ((GameCrashedException) e).originalException.printStackTrace();
+//            else
+//                e.printStackTrace();
+//        }
 	}
 
 	@Override
@@ -102,6 +115,8 @@ public class Tanks extends ApplicationAdapter
 	@Override
 	public void pause()
 	{
+        window.focused = false;
+        Game.screen.onFocusChange(false);
 		LibGDXAsyncMiniAudioSoundPlayer.miniAudio.stopEngine();
 		if (Game.screen instanceof ScreenExit)
 		{
@@ -113,6 +128,8 @@ public class Tanks extends ApplicationAdapter
 	@Override
 	public void resume()
 	{
+        Game.screen.onFocusChange(true);
+        window.focused = true;
 		LibGDXAsyncMiniAudioSoundPlayer.miniAudio.startEngine();
 		window.lastFrame = System.currentTimeMillis();
 	}

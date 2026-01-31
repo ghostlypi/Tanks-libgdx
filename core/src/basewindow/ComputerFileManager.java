@@ -1,8 +1,11 @@
 package basewindow;
 
+import tanks.Game;
+
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Scanner;
+import java.util.Locale;
 
 public class ComputerFileManager extends BaseFileManager
 {
@@ -15,54 +18,49 @@ public class ComputerFileManager extends BaseFileManager
     @Override
     public ArrayList<String> getInternalFileContents(String file)
     {
-        try
+        ArrayList<String> al = new ArrayList<>();
+
+        try (InputStream st = this.getResource(file))
         {
-            InputStream st = this.getResource(file);
-
             if (st == null)
-                return null;
+                return al;
 
-            Scanner s = new Scanner(new InputStreamReader(st));
-            ArrayList<String> al = new ArrayList<>();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(st, StandardCharsets.UTF_8));
 
-            while (s.hasNext())
+            String line;
+            while ((line = reader.readLine()) != null)
             {
-                al.add(s.nextLine());
+                al.add(line);
             }
 
-            s.close();
             return al;
         }
         catch (Exception e)
         {
             e.printStackTrace();
-            return null;
+            return al;
         }
     }
 
     @Override
     public void openFileManager(String path)
     {
-        String os = System.getProperty("os.name").toLowerCase();
-        String command;
+        String[] cmd;
 
+        String url = "file:///" + path.replace("\\", "/");
+        String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
         if (os.contains("win"))
-            command = "explorer " + path;   // Windows
+            cmd = new String[]{"rundll32", "url.dll,FileProtocolHandler", url};
         else if (os.contains("mac"))
-            command = "open " + path;   // macOS
-        else if (os.contains("nix") || os.contains("nux") || os.contains("bsd"))
-            command = "xdg-open " + path;   // Linux/Unix/BSD
+            cmd = new String[]{"open", url};
         else
-        {
-            System.err.println("Unsupported operating system: " + os);
-            return;
-        }
+            cmd = new String[]{"xdg-open", url};
 
         try
         {
-            Runtime.getRuntime().exec(command);
+            Runtime.getRuntime().exec(cmd);
         }
-        catch (IOException e)
+        catch (Exception e)
         {
             e.printStackTrace();
         }

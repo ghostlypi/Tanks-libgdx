@@ -1,8 +1,13 @@
 package tanks.bullet;
 
-import tanks.*;
+import tanks.Drawing;
+import tanks.Effect;
+import tanks.Game;
+import tanks.Panel;
+import tanks.attribute.AttributeModifier;
 import tanks.gui.screen.ScreenGame;
 import tanks.item.ItemBullet;
+import tanks.tank.Ray;
 import tanks.tank.Tank;
 import tanks.tankson.Property;
 
@@ -25,6 +30,11 @@ public class BulletArc extends Bullet
     @Property(id = "accuracy_spread_circle", minValue = 0.0, name = "Landing accuracy spread", category = BulletPropertyCategory.firing, desc = "The maximum distance between the target aim location and where the bullet actually lands, relative to the distance traveled by the bullet. Larger values are less accurate. \n \n A value of 1 corresponds to the bullet landing off by up to one tile per tile traveled.")
     public double accuracySpreadCircle = 0;
 
+    @Property(id = "bounciness", minValue = 0.0, name = "Bounciness", category = BulletPropertyCategory.travel, desc = "How high the bullet should bounce as a fraction of its initial height")
+    public double bounciness = 0.75;
+
+    protected double warningIndicatorTime = 100;
+
     public BulletArc()
     {
         this.init();
@@ -45,13 +55,13 @@ public class BulletArc extends Bullet
         this.enableCollision = false;
         this.posZ = Game.tile_size / 2;
         this.maxDestroyTimer = 100;
-        this.obstacleCollision = false;
         this.canBeCanceled = false;
         this.moveOut = false;
         this.trail3d = true;
         this.edgeCollision = false;
-        this.showTrace = false;
+        this.showDefaultTrace = false;
         this.revertSpeed = false;
+        this.canDeflect = false;
 
         this.autoZ = false;
     }
@@ -59,12 +69,15 @@ public class BulletArc extends Bullet
     @Override
     public void update()
     {
+        this.range = 0;
+        this.lifespan = 0;
+
         super.update();
 
         if (this.delay > 0)
             return;
 
-        double gravMod = this.getAttributeValue(AttributeModifier.velocity, 1);
+        double gravMod = em().getAttributeValue(AttributeModifier.velocity, 1);
 
         this.vZ -= gravity * Panel.frameFrequency * gravMod;
         this.posZ -= gravity * gravMod * Panel.frameFrequency * Panel.frameFrequency * 0.5;
@@ -73,20 +86,16 @@ public class BulletArc extends Bullet
         {
             if (this.bounces > 0 && (this.posX >= 0 && this.posX <= Game.currentSizeX * Game.tile_size && this.posY >= 0 && this.posY <= Game.currentSizeY * Game.tile_size))
             {
-                this.bounces--;
-                this.posZ += 2 * ((Game.tile_size / 2) - this.posZ);
-                this.vZ = Math.abs(this.vZ) * 0.75;
-
-                if (!this.tank.isRemote)
-                    this.checkCollision();
-
-                this.checkCollisionLocal();
+                this.postBounce(this.bounce());
+                if (this.destroy)
+                    this.arcDestroy(true);
             }
             else
             {
-                double dif = (this.posZ - Game.tile_size / 2) / this.vZ;
-                this.posX -= dif * this.vX;
-                this.posY -= dif * this.vY;
+                double ht = (this.vZ + Math.sqrt(Math.max(0, this.vZ * this.vZ + 2 * gravity * (this.posZ - Game.tile_size / 2)))) / gravity;
+                this.posX += ht * this.vX;
+                this.posY += ht * this.vY;
+                this.posZ = Game.tile_size / 2;
 
                 this.vX = 0;
                 this.vY = 0;
@@ -98,13 +107,58 @@ public class BulletArc extends Bullet
                 this.checkCollisionLocal();
 
                 this.destroy = true;
+                this.arcDestroy(false);
             }
 
-            Drawing.drawing.playSound("bullet_explode.ogg", (float) (Bullet.bullet_size / this.size));
+            this.playArcPop();
         }
 
         if (!this.destroy)
             this.angle = this.getPolarDirection();
+    }
+
+    public double bounce()
+    {
+        this.bounces--;
+
+        double ht = (this.vZ + Math.sqrt(Math.max(0, this.vZ * this.vZ + 2 * gravity * (this.posZ - Game.tile_size / 2)))) / gravity;
+        this.posX += this.vX * ht;
+        this.posY += this.vY * ht;
+        this.posZ = Game.tile_size / 2;
+        this.vZ = this.vZ - gravity * ht;
+
+        if (!this.tank.isRemote)
+            this.checkCollision();
+
+        this.justBounced = true;
+        this.checkCollisionLocal();
+
+        this.collisionX = this.posX;
+        this.collisionY = this.posY;
+        this.addTrail();
+
+        return ht;
+    }
+
+    public void postBounce(double ht)
+    {
+        this.posX -= this.vX * ht;
+        this.posY -= this.vY * ht;
+        this.posZ += ht * this.vZ * this.bounciness - gravity * ht * ht * 0.5;
+        this.vZ = gravity * ht - this.vZ * this.bounciness;
+    }
+
+    public void arcDestroy(boolean remainingBounces)
+    {
+
+    }
+
+    public void playArcPop()
+    {
+        if (this.destroy)
+            Drawing.drawing.playSound("bullet_explode.ogg", (float) (Bullet.bullet_size / this.size));
+        else
+            Drawing.drawing.playSound("bounce.ogg", (float) (Bullet.bullet_size / this.size));
     }
 
     public void draw()
@@ -112,41 +166,49 @@ public class BulletArc extends Bullet
         if (this.delay > 0)
             return;
 
-        Drawing.drawing.setColor(this.outlineColorR, this.outlineColorG, this.outlineColorB, 2 * (60 - this.posZ / 32) * (1 - Math.min(this.destroyTimer / 60, 1)), 0.5);
-        Drawing.drawing.fillGlow(this.posX, this.posY, this.size * 2, this.size * 2, true);
-        Drawing.drawing.fillOval(this.posX, this.posY, this.size, this.size);
+        this.drawShadow();
 
-        if (!Game.enable3d)
-            this.posY -= this.posZ - Game.tile_size / 4;
+        double dt = this.destroyTimer;
+        if (!Game.enable3d && dt <= 0)
+            this.destroyTimer = Math.min(this.posZ / 1000, 0.8) * 60;
 
         super.draw();
 
-        if (!Game.enable3d)
-            this.posY += this.posZ - Game.tile_size / 4;
+        if (!Game.enable3d && dt <= 0)
+            this.destroyTimer = 0;
 
         double time = (this.vZ + Math.sqrt(this.vZ * this.vZ + 2 * gravity * (this.posZ - Game.tile_size / 2))) / gravity;
 
         if (destroy)
             time = 0;
 
-        double limit = 100;
-        if (time <= limit && !ScreenGame.finishedQuick)
+        if (time <= warningIndicatorTime && !ScreenGame.finishedQuick)
         {
             double frac;
 
-            frac = 1 - time / limit;
+            frac = 1 - time / warningIndicatorTime;
+            this.drawCursor(frac, this.posX + this.vX * time, this.posY + this.vY * time);
+        }
+    }
 
-            double s = (1.5 - frac) * this.size * 4;
-            double d = Math.max(1 - (this.destroyTimer / this.maxDestroyTimer) * 2, 0);
+    public void drawShadow()
+    {
+        Drawing.drawing.setColor(this.outlineColor, 2 * (60 - this.posZ / 32) * (1 - Math.min(this.destroyTimer / 60, 1)), 0.5);
+        Drawing.drawing.fillGlow(this.posX, this.posY, this.size * 2, this.size * 2, true);
+        Drawing.drawing.fillOval(this.posX, this.posY, this.size, this.size);
+    }
 
-            Drawing.drawing.setColor(this.baseColorR, this.baseColorG, this.baseColorB, frac * 255 * d, 1);
-            Drawing.drawing.drawImage(frac * Math.PI / 2, "cursor.png", this.posX + this.vX * time, this.posY + this.vY * time, s, s);
+    public void drawCursor(double frac, double x, double y)
+    {
+        double s = (1.5 - frac) * this.size * 4;
+        double d = Math.max(1 - (this.destroyTimer / this.maxDestroyTimer) * 2, 0);
+        Drawing.drawing.setColor(this.baseColor, frac * 255 * d, 1);
+        Drawing.drawing.drawImage(frac * Math.PI / 2, "cursor.png", x, y, s, s);
 
-            if (Game.glowEnabled)
-            {
-                Drawing.drawing.setColor(this.outlineColorR, this.outlineColorG, this.outlineColorB, frac * 255 * d, 1);
-                Drawing.drawing.fillGlow(this.posX + this.vX * time, this.posY + this.vY * time, this.size * 4, this.size * 4);
-            }
+        if (Game.glowEnabled)
+        {
+            Drawing.drawing.setColor(this.outlineColor, frac * 255 * d, 1);
+            Drawing.drawing.fillGlow(x, y, this.size * 4, this.size * 4);
         }
     }
 
@@ -176,16 +238,17 @@ public class BulletArc extends Bullet
         double offset = Math.random() * this.accuracySpreadCircle * d;
 
         double f = 1;
-        if (d / s < this.minAirTime)
-            f = d / (s * this.minAirTime);
+        double time = d / s;
+        if (time < this.minAirTime)
+            f = this.minAirTime / time;
 
         dx += Math.sin(angle) * offset;
         dy += Math.cos(angle) * offset;
         d = Math.sqrt(dx * dx + dy * dy);
 
-        this.setMotionInDirection(this.posX + dx, this.posY + dy, s * f);
+        this.setMotionInDirection(this.posX + dx, this.posY + dy, s / f);
         this.speed *= f;
-        this.vZ = d / s * 0.5 * BulletArc.gravity / f;
+        this.vZ = d / s * 0.5 * BulletArc.gravity * f;
     }
 
     @Override
@@ -210,5 +273,114 @@ public class BulletArc extends Bullet
     public double getRangeMax()
     {
         return this.maxRange;
+    }
+
+    public void drawTrace(double ix, double iy, double fx, double fy)
+    {
+        double ox = this.posX;
+        double oy = this.posY;
+        double oz = this.posZ;
+        double ovx = this.vX;
+        double ovy = this.vY;
+        double ovz = this.vZ;
+        double os = this.speed;
+        double ots = this.accuracySpreadCircle;
+
+        this.posX = ix;
+        this.posY = iy;
+        this.posZ = Game.tile_size / 2;
+        this.accuracySpreadCircle = 0;
+        this.setTargetLocation(fx, fy);
+        this.accuracySpreadCircle = ots;
+
+        double speed = (Math.sqrt(Math.pow(this.vX, 2) + Math.pow(this.vY, 2)));
+        double mul = Math.max(Ray.min_trace_size, this.size) * 0.75;
+
+        int bounces = this.bounces;
+
+        while (true)
+        {
+            double time = mul / speed;
+
+            this.posX += this.vX * time;
+            this.posY += this.vY * time;
+            this.posZ += this.vZ * time;
+
+            this.vZ -= gravity * time;
+            this.posZ -= gravity * time * time * 0.5;
+
+            if (this.posZ < Game.tile_size / 2)
+            {
+                double d = Math.max(0, this.vZ * this.vZ + 2 * gravity * (this.posZ - Game.tile_size / 2));
+                double ht = (this.vZ + Math.sqrt(d)) / gravity;
+
+                if (!(bounces > 0 && (this.posX >= 0 && this.posX <= Game.currentSizeX * Game.tile_size && this.posY >= 0 && this.posY <= Game.currentSizeY * Game.tile_size)))
+                {
+                    this.posX += this.vX * ht;
+                    this.posY += this.vY * ht;
+                    break;
+                }
+
+                double vzAtCollision = this.vZ - gravity * ht;
+
+                this.posZ = Game.tile_size / 2;
+
+                double newVZ = this.vZ - vzAtCollision * (1 + this.bounciness);
+                this.vZ = -vzAtCollision * this.bounciness;
+                this.posX += this.vX * ht;
+                this.posY += this.vY * ht;
+
+                if (this.bounceTrace(ix, iy))
+                {
+                    this.vZ = newVZ;
+                    this.posZ += ht * vzAtCollision * this.bounciness - gravity * ht * ht * 0.5;
+                }
+                else
+                {
+                    this.posZ += -ht * this.vZ - gravity * ht * ht * 0.5;
+                    this.vZ += gravity * ht;
+                }
+
+                this.posX -= this.vX * ht;
+                this.posY -= this.vY * ht;
+
+                bounces--;
+            }
+
+            if (this.posZ < 1000)
+            {
+                Effect e = Effect.createNewEffect(this.posX, this.posY, this.posZ, Effect.EffectType.ray);
+                e.size = Math.max(Ray.min_trace_size, this.size);
+                Game.effects.add(e);
+            }
+        }
+
+        this.addTraceTarget(ix, iy);
+
+        this.posX = ox;
+        this.posY = oy;
+        this.posZ = oz;
+        this.vX = ovx;
+        this.vY = ovy;
+        this.vZ = ovz;
+        this.speed = os;
+        this.accuracySpreadCircle = ots;
+    }
+
+    public void addTraceTarget(double ix, double iy)
+    {
+        if (this.accuracySpreadCircle > 0)
+        {
+            double d = (Math.sqrt(Math.pow(this.posX - ix, 2) + Math.pow(this.posY - iy, 2)));
+            Effect e = Effect.createNewEffect(this.posX, this.posY, Effect.EffectType.circleMarker);
+            e.size = this.accuracySpreadCircle * d;
+            Game.effects.add(e);
+        }
+    }
+
+    public boolean bounceTrace(double ix, double iy)
+    {
+        this.addTraceTarget(ix, iy);
+        return true;
     }
 }

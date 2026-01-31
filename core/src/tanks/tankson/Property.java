@@ -23,13 +23,16 @@ public @interface Property
         turretBaseModel,
         turretModel,
         emblem,
-        color,
+        colorRGBA,
+        colorRGB,
         description,
         complexString,
         music,
         spawnedTanks,
         bulletSound,
         itemIcon,
-        name
+        name,
+        defaultBuildForbidden,
+        trails,
     }
 }

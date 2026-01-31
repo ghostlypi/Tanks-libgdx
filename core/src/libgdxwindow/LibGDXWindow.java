@@ -18,12 +18,13 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import tanks.Game;
 import theopalgames.tanks.Tanks;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.Buffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Stack;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 import static com.badlogic.gdx.Input.Keys.*;
 import static com.badlogic.gdx.graphics.GL20.*;
@@ -136,10 +137,12 @@ public class LibGDXWindow extends BaseWindow
 
         renderer = notexRenderer;
 
-        fontRenderer = new LibGDXFontRenderer(this, "font.png");
+        fontRenderer = new LibGDXFontRenderer(this, "fonts/default/font.png");
 
         this.soundsEnabled = true;
         this.soundPlayer = new LibGDXAsyncMiniAudioSoundPlayer(this);
+
+        this.registerFonts();
 
         this.antialiasingSupported = true;
 
@@ -222,6 +225,38 @@ public class LibGDXWindow extends BaseWindow
                 return true;
             }
         });
+    }
+
+    public void registerFonts()
+    {
+        try
+        {
+            int count = 1;
+
+            while (true)
+            {
+                ArrayList<String> zhCnFont = Game.game.fileManager.getInternalFileContents("fonts/zh_cn/font_zh_cn_" + count + ".png");
+                ArrayList<String> zhCnTxt = Game.game.fileManager.getInternalFileContents("fonts/zh_cn/font_zh_cn_" + count + ".txt");
+                if (zhCnFont == null)
+                    break;
+
+                StringBuilder sb = new StringBuilder();
+                for (String s : zhCnTxt)
+                {
+                    sb.append(s);
+                }
+                String chinese_chars = sb.toString();
+                int[] chinese_chars_sizes = new int[chinese_chars.length()];
+                Arrays.fill(chinese_chars_sizes, 8);
+                this.fontRenderer.addFont("/fonts/zh_cn/font_zh_cn_" + count + ".png", chinese_chars, chinese_chars_sizes);
+                count++;
+            }
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+            while (true) {}
+        }
     }
 
     public float[] getTransformedMouse()
@@ -371,12 +406,19 @@ public class LibGDXWindow extends BaseWindow
                     (float) -absoluteDepth,
                     (float) absoluteDepth / 8);
         else
-            projectionMatrix.idt().setToProjection(
-                    (float)(-absoluteWidth / (absoluteDepth * 2.0) * m),
-                    (float)(absoluteWidth / (absoluteDepth * 2.0) * m),
+        {
+            if (this.orthographic)
+                projectionMatrix.setToOrtho((float) (-absoluteWidth / 2), (float) (absoluteWidth / 2),
+                        (float) (absoluteHeight / 2), (float) (-absoluteHeight / 2),
+                        (float) (-absoluteDepth * m), (float) (absoluteDepth * m));
+            else
+                projectionMatrix.idt().setToProjection(
+                    (float) (-absoluteWidth / (absoluteDepth * 2.0) * m),
+                    (float) (absoluteWidth / (absoluteDepth * 2.0) * m),
                     (float) (absoluteHeight / (absoluteDepth * 2.0) * m),
-                    (float)(-absoluteHeight / (absoluteDepth * 2.0) * m),
+                    (float) (-absoluteHeight / (absoluteDepth * 2.0) * m),
                     (float) m, (float) (absoluteDepth * m * clipDistMultiplier));
+        }
 
         if (!this.showKeyboard && this.keyboardOffset > 0)
             this.keyboardOffset = Math.max(0, this.keyboardOffset * Math.pow(0.98, frameFrequency) - 0.015 * frameFrequency);
@@ -443,11 +485,11 @@ public class LibGDXWindow extends BaseWindow
             Gdx.gl.glEnable(GL20.GL_BLEND);
 
             if (light)
-                Gdx.gl.glBlendFunc(GL20.GL_DST_COLOR, GL20.GL_ONE);
+                this.setLightBlendFunc();
             else if (!glow)
-                Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+                this.setTransparentBlendFunc();
             else
-                Gdx.gl.glBlendFunc(GL20.GL_SRC_COLOR, GL20.GL_ONE);
+                this.setGlowBlendFunc();
 
             Gdx.gl.glDepthMask(depthMask);
 
@@ -488,11 +530,11 @@ public class LibGDXWindow extends BaseWindow
         Gdx.gl.glEnable(GL20.GL_BLEND);
 
         if (light)
-            Gdx.gl.glBlendFunc(GL20.GL_DST_COLOR, GL20.GL_ONE);
+            this.setLightBlendFunc();
         else if (!glow)
-            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            this.setTransparentBlendFunc();
         else
-            Gdx.gl.glBlendFunc(GL20.GL_SRC_COLOR, GL20.GL_ONE);
+            this.setGlowBlendFunc();
 
         Gdx.gl.glDepthMask(depthMask);
         this.renderer.begin(this.projectionMatrix, GL_TRIANGLES);
@@ -523,7 +565,7 @@ public class LibGDXWindow extends BaseWindow
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT | (Gdx.graphics.getBufferFormat().coverageSampling?GL20.GL_COVERAGE_BUFFER_BIT_NV:0));
 
         Gdx.gl.glEnable(GL20.GL_BLEND);
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+        this.setTransparentBlendFunc();
 
         if (this.previousKeyboard != this.showKeyboard)
         {
@@ -746,6 +788,12 @@ public class LibGDXWindow extends BaseWindow
             modelviewMatrix.mul(this.matrix2);
         else
             projectionMatrix.mul(this.matrix2);
+    }
+
+    @Override
+    public void transform(basewindow.transformation.Matrix4 matrix)
+    {
+
     }
 
     @Override
@@ -1177,6 +1225,18 @@ public class LibGDXWindow extends BaseWindow
         return new LibGDXShaderUtil(this, p);
     }
 
+    @Override
+    public String screenshot(String dir, boolean async) throws IOException
+    {
+        return null;
+    }
+
+    @Override
+    public void setForceModelGlow(boolean glow)
+    {
+
+    }
+
     public void enableTexture()
     {
         if (!drawingShadow)
@@ -1225,16 +1285,22 @@ public class LibGDXWindow extends BaseWindow
     public void setGlowBlendFunc()
     {
         Gdx.gl.glBlendFunc(GL_SRC_COLOR, GL_ONE);
+        if (!drawingShadow && this.currentShaderGroup != null)
+            this.currentShaderGroup.shaderBase.blendFunc.set(1);
     }
 
     public void setLightBlendFunc()
     {
         Gdx.gl.glBlendFunc(GL_DST_COLOR, GL_ONE);
+        if (!drawingShadow && this.currentShaderGroup != null)
+            this.currentShaderGroup.shaderBase.blendFunc.set(2);
     }
 
     public void setTransparentBlendFunc()
     {
         Gdx.gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        if (!drawingShadow && this.currentShaderGroup != null)
+            this.currentShaderGroup.shaderBase.blendFunc.set(0);
     }
 
     public void beginLinkedImages(String image, boolean scaled, boolean depthtest)

@@ -2,8 +2,10 @@ package tanks.obstacle;
 
 import tanks.*;
 import tanks.gui.screen.ScreenGame;
+import tanks.gui.screen.leveleditor.selector.SelectorGroupID;
 import tanks.tank.Tank;
 import tanks.tank.TeleporterOrb;
+import tanks.tankson.MetadataProperty;
 
 import java.util.ArrayList;
 
@@ -15,25 +17,29 @@ public class ObstacleTeleporter extends Obstacle
 	public double cooldown;
 	public double brightness = 1;
 
+	@MetadataProperty(id="group_id", name = "Group ID", image="id.png", selector = SelectorGroupID.selector_name, keybind = "editor.groupID")
+	public int groupID = 0;
+
 	public Effect glow;
 
 	public ObstacleTeleporter(String name, double posX, double posY)
 	{
 		super(name, posX, posY);
 
+		this.primaryMetadataID = "group_id";
+
 		this.replaceTiles = false;
-		this.enableGroupID = true;
 		this.destructible = false;
 		this.tankCollision = false;
 		this.bulletCollision = false;
 		this.checkForObjects = true;
 		this.drawLevel = 0;
-		this.update = true;
+		this.setUpdate(true);
 		this.colorR = 0;
 		this.colorG = 255;
 		this.colorB = 255;
 		this.draggable = false;
-		this.enableStacking = false;
+		this.type = ObstacleType.extra;
 
 		this.batchDraw = false;
 
@@ -117,6 +123,18 @@ public class ObstacleTeleporter extends Obstacle
 	}
 
 	@Override
+	public void draw3dOutline(double r, double g, double b, double a)
+	{
+		double h = Game.sampleTerrainGroundHeight(this.posX, this.posY);
+		Drawing.drawing.setColor(127, 127, 127, a);
+		Drawing.drawing.fillOval(this.posX, this.posY, h + 1, draw_size, draw_size, true, false);
+		Drawing.drawing.setColor(r / 2, g / 2, b / 2, a);
+		Drawing.drawing.fillOval(this.posX, this.posY, h + 2, draw_size * 5 / 8, draw_size * 5 / 8, true, false);
+		Drawing.drawing.setColor(r, g, b, a);
+		Drawing.drawing.fillOval(this.posX, this.posY, h + 3, draw_size / 2, draw_size / 2, true, false);
+	}
+
+	@Override
 	public void update()
 	{
 		ArrayList<ObstacleTeleporter> teleporters = new ArrayList<>();
@@ -126,9 +144,9 @@ public class ObstacleTeleporter extends Obstacle
 		{
 			for (int i = 0; i < Game.movables.size(); i++)
 			{
-				Movable m = Game.movables.get(i);
+                Movable m = Game.movables.get(i);
 
-				if (m instanceof Tank && ((Tank) m).targetable && Movable.distanceBetween(this, m) < ((Tank) m).size)
+				if (m instanceof Tank && ((Tank) m).currentlyTargetable && GameObject.distanceBetween(this, m) < ((Tank) m).size && !m.destroy)
 				{
 					t = (Tank) m;
 
@@ -143,7 +161,7 @@ public class ObstacleTeleporter extends Obstacle
 						for (int j = 0; j < Game.obstacles.size(); j++)
 						{
 							Obstacle o = Game.obstacles.get(j);
-							if (o instanceof ObstacleTeleporter && o != this && o.groupID == this.groupID && ((ObstacleTeleporter) o).cooldown <= 0)
+							if (o instanceof ObstacleTeleporter && o != this && ((ObstacleTeleporter) o).groupID == this.groupID && ((ObstacleTeleporter) o).cooldown <= 0)
 							{
 								teleporters.add((ObstacleTeleporter) o);
 							}
@@ -167,14 +185,28 @@ public class ObstacleTeleporter extends Obstacle
 	}
 
 	@Override
-	public void setMetadata(String s)
+	public void refreshMetadata()
 	{
-		this.groupID = (int) Double.parseDouble(s);
-
 		double[] col = getColorFromID(this.groupID);
 		this.colorR = col[0];
 		this.colorG = col[1];
 		this.colorB = col[2];
+	}
+
+	@Override
+	public void setMetadata(String s)
+	{
+		if (s.isEmpty())
+			s = "0";
+
+		this.groupID = (int) Double.parseDouble(s);
+		this.refreshMetadata();
+	}
+
+	@Override
+	public String getMetadata()
+	{
+		return this.groupID + "";
 	}
 
 	public static double[] getColorFromID(int id)

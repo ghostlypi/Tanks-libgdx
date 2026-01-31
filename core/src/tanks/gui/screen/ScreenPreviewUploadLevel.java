@@ -1,6 +1,8 @@
 package tanks.gui.screen;
 
-import tanks.*;
+import tanks.Drawing;
+import tanks.Game;
+import tanks.Level;
 import tanks.gui.Button;
 import tanks.network.event.online.EventUploadLevel;
 import tanks.obstacle.Obstacle;
@@ -53,9 +55,6 @@ public class ScreenPreviewUploadLevel extends Screen implements ILevelPreviewScr
     {
         this.back.update();
         this.upload.update();
-
-        if (Game.enable3d)
-            Game.recomputeHeightGrid();
     }
 
     @Override

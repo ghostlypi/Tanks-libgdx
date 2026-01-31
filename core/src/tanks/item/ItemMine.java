@@ -3,9 +3,10 @@ package tanks.item;
 import tanks.Player;
 import tanks.tank.Mine;
 import tanks.tank.Tank;
+import tanks.tankson.ICopyable;
 import tanks.tankson.Property;
 
-public class ItemMine extends Item
+public class ItemMine extends Item implements ICopyable<ItemMine>
 {
     public static final String item_class_name = "mine";
 
@@ -16,7 +17,7 @@ public class ItemMine extends Item
     {
         this.rightClick = true;
         this.supportsHits = true;
-        this.icon = "mine.png";
+        this.icon = DefaultItemIcons.mine.getCopy();
     }
 
     public ItemMine(Mine m)

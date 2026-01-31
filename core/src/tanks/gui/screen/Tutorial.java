@@ -83,7 +83,7 @@ public class Tutorial extends Minigame
         this.gray = new TankGray("gray", 47.5 * Game.tile_size, 9.5 * Game.tile_size, Math.PI);
         this.gray.team = Game.enemyTeam;
 
-        arrow = Drawing.drawing.createModel();
+        arrow = Drawing.drawing.newModel();
         arrow.shapes = new ModelPart.Shape[2];
         arrow.shapes[0] = new ModelPart.Triangle(new ModelPart.Point(-1, 0, 0), new ModelPart.Point(-1.75, 0, 0), new ModelPart.Point(-2, 0.25, 0), 1);
         arrow.shapes[1] = new ModelPart.Triangle(new ModelPart.Point(-1, 0, 0), new ModelPart.Point(-1.75, 0, 0), new ModelPart.Point(-2, -0.25, 0), 1);
@@ -202,7 +202,7 @@ public class Tutorial extends Minigame
                 }
             }
 
-            if (!Game.game.solidGrid[27][10] || !Game.game.solidGrid[27][11] || !Game.game.solidGrid[27][12] || !Game.game.solidGrid[27][13] || !Game.game.solidGrid[27][14])
+            if (!Game.isTankSolid(27, 10) || !Game.isTankSolid(27, 11) || !Game.isTankSolid(27, 12) || !Game.isTankSolid(27, 13) || !Game.isTankSolid(27, 14))
                 step = 6;
         }
         else if (step == 6 && brown.destroy)
@@ -219,19 +219,19 @@ public class Tutorial extends Minigame
             if (step == 2)
             {
                 Drawing.drawing.addSyncedMusic("arcade/rampage1.ogg", Game.musicVolume, true, 500);
-                Game.movables.add(new Crate(this.dummy1));
-                Game.movables.add(new Crate(this.dummy2));
-                Game.movables.add(new Crate(this.dummy3));
-                Game.movables.add(new Crate(this.dummy4));
+                Game.movables.add(new Crate(this.dummy1, 850));
+                Game.movables.add(new Crate(this.dummy2, 950));
+                Game.movables.add(new Crate(this.dummy3, 1050));
+                Game.movables.add(new Crate(this.dummy4, 1150));
             }
             else if (step == 3)
             {
                 Drawing.drawing.addSyncedMusic("arcade/rampage2.ogg", Game.musicVolume, true, 500);
-                Game.movables.add(new Crate(this.dummy5));
+                Game.movables.add(new Crate(this.dummy5, 1000));
             }
             else if (step == 4)
             {
-                Game.movables.add(new Crate(this.brown));
+                Game.movables.add(new Crate(this.brown, 1000));
                 Drawing.drawing.addSyncedMusic("arcade/rampage3.ogg", Game.musicVolume, true, 500);
             }
             else if (step == 6)
@@ -241,7 +241,7 @@ public class Tutorial extends Minigame
             }
             else if (step == 8)
             {
-                Game.movables.add(new Crate(this.gray));
+                Game.movables.add(new Crate(this.gray, 1000));
                 Drawing.drawing.addSyncedMusic("arcade/rampage6.ogg", Game.musicVolume, true, 500);
                 Drawing.drawing.addSyncedMusic("arcade/rampage7.ogg", Game.musicVolume, true, 500);
             }

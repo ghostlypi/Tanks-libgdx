@@ -1,10 +1,9 @@
 package basewindow;
 
-import basewindow.transformation.ScaleAboutPoint;
-import basewindow.transformation.Shear;
-import basewindow.transformation.Transformation;
-import basewindow.transformation.Translation;
+import basewindow.transformation.*;
+import tanks.Game;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.ArrayList;
@@ -13,37 +12,26 @@ import java.util.HashMap;
 public abstract class BaseWindow
 {
     public String buildDate = "";
+    public boolean runningFromSource;
     protected ArrayList<String> overrideLocations = new ArrayList<>();
 
     public BaseShapeRenderer shapeRenderer;
     public BaseFontRenderer fontRenderer;
 
     public boolean angled = false;
+    public double pointWidth = -1, pointHeight = -1;
 
-    public double pointWidth = -1;
-    public double pointHeight = -1;
-
-    public double absoluteWidth;
-    public double absoluteHeight;
-    public double absoluteDepth;
-
-    public double clipMultiplier = 100;
-    public double clipDistMultiplier = 1;
+    public double absoluteWidth, absoluteHeight, absoluteDepth;
+    public double clipMultiplier = 100, clipDistMultiplier = 1;
 
     public boolean hasResized;
 
-    public double absoluteMouseX;
-    public double absoluteMouseY;
-
+    public double absoluteMouseX, absoluteMouseY;
     public boolean constrainMouse;
 
-    public double colorR;
-    public double colorG;
-    public double colorB;
-    public double colorA;
-    public double glow;
-
+    public double colorR, colorG, colorB, colorA, glow;
     public boolean fullscreen;
+    public boolean focused = true;
 
     public HashMap<Integer, InputPoint> touchPoints = new HashMap<>();
 
@@ -82,6 +70,7 @@ public abstract class BaseWindow
     public IUpdater updater;
     public IWindowHandler windowHandler;
 
+    public boolean orthographic = false;
     public ArrayList<Transformation> transformations = new ArrayList<>();
 
     public double yaw = 0;
@@ -92,7 +81,12 @@ public abstract class BaseWindow
     public double yOffset = 0;
     public double zOffset = 0;
 
-    public Transformation[] baseTransformations = new Transformation[]{new Translation(this, -0.5, -0.5, -1) /*, new Shear(this, 0, 0, 0, 0, 0, -0.75) */};
+
+    public Transformation[] baseTransformations = new Transformation[]{new Translation(this, -0.5, -0.5, -1),
+//            new ScaleAboutPoint(this, 1,  Math.sqrt(0.5), 1, 0.5, 0.5, 0.5),
+//            new RotationAboutPoint(this, 0, 0, Math.PI / 4, 0.5, 0.5, 0.5),
+//            new Shear(this, 0, 0, 0, 0, Math.sqrt(0.5), -Math.sqrt(0.5)),
+    };
     public Transformation[] lightBaseTransformation = new Transformation[]{new ScaleAboutPoint(this, 0.8, 0.8, 0.8, 0.5, 0.5, 0.5), new Shear(this, 0, 0, 0, 0, 0.5, 0.5)};
     public double[] lightVec = new double[]{-0.66666666, 0.66666666, -0.33333333};
 
@@ -172,6 +166,11 @@ public abstract class BaseWindow
         lastFrame = time;
 
         frameFrequency = Math.max(0, (time - lastFrameTime) / 10000000.0);
+
+//        if (Game.game.window.pressedKeys.contains(InputCodes.KEY_F8))
+//        {
+//            frameFrequency *= 5;
+//        }
     }
 
     public abstract void run();
@@ -221,6 +220,8 @@ public abstract class BaseWindow
     public abstract int translateTextKey(int key);
 
     public abstract void transform(double[] matrix);
+
+    public abstract void transform(Matrix4 matrix);
 
     public abstract void calculateBillboard();
 
@@ -285,6 +286,10 @@ public abstract class BaseWindow
     public abstract BaseShapeBatchRenderer createShapeBatchRenderer(ShaderGroup shader);
 
     public abstract BaseShaderUtil getShaderUtil(ShaderProgram p);
+
+    public abstract String screenshot(String dir, boolean async) throws IOException;
+
+    public abstract void setForceModelGlow(boolean glow);
 
     public void setShader(ShaderBase s)
     {

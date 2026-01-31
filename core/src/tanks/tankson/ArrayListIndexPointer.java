@@ -7,16 +7,19 @@ public class ArrayListIndexPointer<T> extends Pointer<T>
     protected ArrayList<T> arrayList;
     protected int index;
     protected boolean deleted = false;
+    protected Class<T> tClass;
 
-    public ArrayListIndexPointer(ArrayList<T> l, int i)
+    public ArrayListIndexPointer(Class<T> tClass, ArrayList<T> l, int i)
     {
+        this.tClass = tClass;
         this.arrayList = l;
         this.index = i;
         this.nullable = false;
     }
 
-    public ArrayListIndexPointer(ArrayList<T> l, int i, boolean nullable)
+    public ArrayListIndexPointer(Class<T> tClass, ArrayList<T> l, int i, boolean nullable)
     {
+        this.tClass = tClass;
         this.arrayList = l;
         this.index = i;
         this.nullable = nullable;
@@ -43,18 +46,23 @@ public class ArrayListIndexPointer<T> extends Pointer<T>
         if (this.deleted)
             return null;
 
-        return (T) this.arrayList.get(this.index);
+        return this.arrayList.get(this.index);
+    }
+
+    public int getIndex()
+    {
+        return this.index;
     }
 
     @Override
     public Class<T> getType()
     {
-        return (Class<T>) this.arrayList.get(this.index).getClass();
+        return this.tClass;
     }
 
     @Override
     public <U> Pointer<U> cast()
     {
-        return new ArrayListIndexPointer<U>((ArrayList<U>) arrayList, index, nullable);
+        return new ArrayListIndexPointer<U>((Class<U>) tClass, (ArrayList<U>) this.arrayList, this.index, this.nullable);
     }
 }

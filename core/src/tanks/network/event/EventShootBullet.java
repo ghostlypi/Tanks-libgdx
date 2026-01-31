@@ -7,8 +7,10 @@ import tanks.bullet.Bullet;
 import tanks.bullet.BulletInstant;
 import tanks.item.Item;
 import tanks.item.ItemBullet;
-import tanks.network.NetworkUtils;
 import tanks.tank.Tank;
+import tanks.tank.TankAIControlled;
+import tanks.tank.TankPlayer;
+import tanks.tank.TankRemote;
 
 public class EventShootBullet extends PersonalEvent
 {
@@ -31,7 +33,7 @@ public class EventShootBullet extends PersonalEvent
 	public EventShootBullet(Bullet b)
 	{
 		this.id = b.networkID;
-		this.tank = b.tank.networkID;
+        this.tank = b.tank.networkID;
 		this.posX = b.posX;
 		this.posY = b.posY;
 		this.posZ = b.posZ;
@@ -55,42 +57,49 @@ public class EventShootBullet extends PersonalEvent
 
 		try
 		{
-			Bullet sb = null;
-			if (this.item > 0)
+			ItemBullet.ItemStackBullet sb = null;
+			if (this.item > 0 && this.item <= Game.currentLevel.clientShop.size())
 			{
-				Item i = Game.currentLevel.clientShop.get(this.item - 1).itemStack.item;
-				if (i instanceof ItemBullet)
-					sb = ((ItemBullet) i).bullet;
+				Item.ItemStack<?> i = Game.currentLevel.clientShop.get(this.item - 1).itemStack;
+				if (i instanceof ItemBullet.ItemStackBullet)
+					sb = (ItemBullet.ItemStackBullet) i;
 			}
-			else if (this.item < 0)
+			else if (this.item > Game.currentLevel.clientShop.size())
 			{
-				Item i = Game.currentLevel.clientStartingItems.get(-this.item - 1).item;
-				if (i instanceof ItemBullet)
-					sb = ((ItemBullet) i).bullet;
-			}
+				Item.ItemStack<?> i = Game.currentLevel.clientStartingItems.get(this.item - 1 - Game.currentLevel.clientShop.size());
 
-			Bullet b;
+				if (i instanceof ItemBullet.ItemStackBullet)
+					sb = ((ItemBullet.ItemStackBullet) i);
+			}
+			else if (t instanceof TankRemote || t instanceof TankPlayer)
+			{
+				Tank t2 = t;
+
+				if (t instanceof TankRemote)
+					t2 = ((TankRemote) t).tank;
+
+				if (t2 instanceof TankAIControlled)
+					sb = ((TankAIControlled) t2).bulletItem;
+				else if (t2 instanceof TankPlayer)
+					sb = ((ItemBullet.ItemStackBullet)(((TankPlayer) t2).abilities.get(-this.item - 1)));
+			}
 
 			if (sb == null)
-				b = t.bullet.getClass().getConstructor(double.class, double.class, Tank.class, boolean.class, ItemBullet.ItemStackBullet.class).newInstance(this.posX, this.posY, t, false, t.bulletItem);
-			else
-				b = sb.getClass().getConstructor(double.class, double.class, Tank.class, boolean.class, ItemBullet.ItemStackBullet.class).newInstance(this.posX, this.posY, t, false, t.bulletItem);
+				return;
 
+			Bullet b = sb.item.bullet.getClass().getConstructor(double.class, double.class, Tank.class, boolean.class, ItemBullet.ItemStackBullet.class).newInstance(this.posX, this.posY, t, false, sb);
 			b.posZ = posZ;
 			b.vX = vX;
 			b.vY = vY;
 			b.vZ = vZ;
 
-			if (sb == null)
-				t.bullet.clonePropertiesTo(b);
-			else
-				sb.clonePropertiesTo(b);
+			sb.item.bullet.clonePropertiesTo(b);
 
 			b.speed = speed;
 
 			b.setColorFromTank();
 
-			if (t.bulletItem.item.cooldownBase <= 0)
+			if (sb.item.cooldownBase <= 0)
 				b.frameDamageMultipler = Panel.frameFrequency;
 
 			b.networkID = this.id;

@@ -1,11 +1,11 @@
 package tanks.gui;
 
-import basewindow.InputCodes;
 import basewindow.InputPoint;
 import tanks.Drawing;
 import tanks.Effect;
 import tanks.Game;
 import tanks.Panel;
+import tanks.translation.Translation;
 
 public class SearchBox extends TextBox
 {
@@ -140,7 +140,9 @@ public class SearchBox extends TextBox
 		{
 			handled = true;
 			this.clear();
-			function.run();
+
+			if (!this.selected)
+				function.run();
 		}
 
 		if (Game.game.window.touchscreen)
@@ -154,12 +156,16 @@ public class SearchBox extends TextBox
 
 	public void drawInput()
 	{
+		double size = this.sizeY * 0.6;
+		if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, inputText) / Drawing.drawing.interfaceScale > this.sizeX - 120)
+			Drawing.drawing.setInterfaceFontSize(size * (this.sizeX - 120) / (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, inputText) / Drawing.drawing.interfaceScale));
+
 		if (selected)
 			Drawing.drawing.drawInterfaceText(posX, posY, inputText + "\u00a7127127127255_");
 		else
 		{
 			if (this.inputText.length() <= 0)
-				Drawing.drawing.drawInterfaceText(posX, posY, "\u00a7127127127255Search");
+				Drawing.drawing.drawInterfaceText(posX, posY, "\u00a7127127127255" + Translation.translate("Search"));
 			else
 				Drawing.drawing.drawInterfaceText(posX, posY, inputText);
 		}
@@ -174,47 +180,5 @@ public class SearchBox extends TextBox
 			this.effectTimer -= 0.4 / Panel.frameFrequency;
 			Button.addEffect(this.posX + this.sizeY / 2, this.posY, this.sizeX - this.sizeY * (2 - 0.8), this.sizeY * 0.8, this.glowEffects);
 		}
-	}
-
-	public void submitEffect()
-	{
-
-	}
-
-	public void inputKey(char key)
-	{
-		super.inputKey(key);
-		this.performValueCheck();
-		function.run();
-	}
-
-	public void submit()
-	{
-		Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ENTER);
-		Game.game.window.validPressedKeys.remove((Integer) InputCodes.KEY_ESCAPE);
-
-		this.performValueCheck();
-		this.previousInputText = this.inputText;
-		Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
-		Drawing.drawing.playVibration("click");
-		selected = false;
-		Game.game.window.showKeyboard = false;
-		Panel.selectedTextBox = null;
-
-		if (Game.glowEnabled)
-		{
-			this.submitEffect();
-		}
-	}
-
-	@Override
-	public void revert()
-	{
-		selected = false;
-		Panel.selectedTextBox = null;
-		this.inputText = "";
-		function.run();
-		Drawing.drawing.playSound("bounce.ogg", 0.25f, 0.7f);
-		Game.game.window.showKeyboard = false;
 	}
 }

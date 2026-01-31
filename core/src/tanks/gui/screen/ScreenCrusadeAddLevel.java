@@ -33,6 +33,7 @@ public class ScreenCrusadeAddLevel extends ScreenPlaySavedLevels
                     ScreenCrusadeEditLevel s = new ScreenCrusadeEditLevel(new Crusade.CrusadeLevel(name, null), this, previous);
                     if (Game.loadLevel(file, s))
                     {
+                        s.level.buildOverrides.addAll(Game.currentLevel.playerBuilds);
                         s.level.levelString = Game.currentLevel.levelString;
                         s.level.tanks.addAll(Game.currentLevel.customTanks);
                         Game.screen = s;
@@ -68,6 +69,6 @@ public class ScreenCrusadeAddLevel extends ScreenPlaySavedLevels
     @Override
     public void onAttemptClose()
     {
-        Game.screen = new ScreenConfirmSaveCrusade(Game.screen, previous);
+        //Game.screen = new ScreenConfirmSaveCrusade(Game.screen, previous);
     }
 }

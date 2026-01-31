@@ -4,6 +4,8 @@ import tanks.Drawing;
 import tanks.Effect;
 import tanks.Game;
 import tanks.Panel;
+import tanks.bullet.Bullet;
+import tanks.bullet.BulletEffect;
 import tanks.gui.screen.ScreenGame;
 import tanks.gui.screen.ScreenInfo;
 import tanks.gui.screen.ScreenPartyHost;
@@ -25,8 +27,11 @@ public class SelectorDrawable extends Button
     public double hoverColorB = 255;
     public String optionText = "";
     public Tank tank;
+    public BulletEffect bulletEffect;
     public Object value;
     public ArrayList<Tank> multiTanks = new ArrayList<>();
+    public ArrayList<Effect> effects = new ArrayList<>();
+    public ArrayList<Effect> removeEffects = new ArrayList<>();
 
     public SelectorDrawable(double x, double y, double sX, double sY, String text, Runnable f)
     {
@@ -100,6 +105,10 @@ public class SelectorDrawable extends Button
 
         drawing.drawInterfaceText(posX, posY - sizeY * 13 / 16, translatedText);
 
+        double size = this.sizeY * 0.6;
+        if (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, optionText) / Drawing.drawing.interfaceScale > this.sizeX - 80)
+            Drawing.drawing.setInterfaceFontSize(size * (this.sizeX - 80) / (Game.game.window.fontRenderer.getStringSizeX(Drawing.drawing.fontSize, optionText) / Drawing.drawing.interfaceScale));
+
         Drawing.drawing.drawInterfaceText(posX, posY, this.optionText);
 
 
@@ -140,6 +149,12 @@ public class SelectorDrawable extends Button
             Drawing.drawing.drawInterfaceImage(this.image, this.posX - this.sizeX / 2 + this.sizeY / 2 + 10, this.posY, this.sizeY, this.sizeY);
         }
 
+        if (this.itemIcon != null)
+        {
+            Drawing.drawing.setColor(255, 255, 255);
+            Drawing.drawing.drawInterfaceImage(this.itemIcon, this.posX - this.sizeX / 2 + this.sizeY / 2 + 10, this.posY, this.sizeY, this.sizeY);
+        }
+
         if (this.multiTanks.size() > 1)
         {
             double start = -this.sizeX / 2 + this.sizeY / 2 + 30;
@@ -155,6 +170,11 @@ public class SelectorDrawable extends Button
         else if (this.tank != null)
         {
             this.tank.drawForInterface(this.posX - this.sizeX / 2 + this.sizeY / 2 + 10, this.posY, 0.5);
+        }
+        else if (this.bulletEffect != null)
+        {
+            if (!Game.game.window.drawingShadow)
+                this.bulletEffect.drawForInterface(this.posX, this.sizeX * 0.8, this.posY, Bullet.bullet_size, this.effects, this.removeEffects);
         }
     }
 

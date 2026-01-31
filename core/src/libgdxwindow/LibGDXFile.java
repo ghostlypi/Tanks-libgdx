@@ -27,6 +27,8 @@ public class LibGDXFile extends BaseFile
         if (Tanks.window.appType == Application.ApplicationType.iOS)
         {
             path = path.replace("/.tanks/", "/");
+            if (path.equals("/.tanks"))
+                path = "/";
             this.file = Gdx.files.external(path);
         }
         else

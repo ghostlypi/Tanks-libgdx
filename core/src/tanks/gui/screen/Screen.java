@@ -14,6 +14,7 @@ public abstract class Screen implements IBatchRenderableObject
 	public String music = null;
 	public String musicID = null;
 
+	public String windowTitle = "";
 	public String screenHint = "";
 	public boolean showDefaultMouse = true;
 
@@ -50,6 +51,8 @@ public abstract class Screen implements IBatchRenderableObject
 
 	public IBatchRenderableObject[][] tiles;
 
+    public boolean drawDebugInternally = false;
+
 	public double lastObsSize;
 
 	public Screen()
@@ -59,8 +62,6 @@ public abstract class Screen implements IBatchRenderableObject
 
 	public Screen(double objWidth, double objHeight, double objXSpace, double objYSpace)
 	{
-		//Game.game.window.setCursorLocked(false);
-
 		this.objWidth = objWidth;
 		this.objHeight = objHeight;
 		this.objXSpace = objXSpace;
@@ -97,18 +98,6 @@ public abstract class Screen implements IBatchRenderableObject
 		if (!(Game.screen instanceof IDarkScreen))
 			Panel.darkness = Math.max(Panel.darkness - Panel.frameFrequency * 3, 0);
 
-		for (int i = 0; i < Game.currentSizeX; i++)
-		{
-			for (int j = 0; j < Game.currentSizeY; j++)
-			{
-				if (Game.game.heightGrid[i][j] <= -1000)
-					Game.game.heightGrid[i][j] = 0;
-
-				if (Game.game.groundEdgeHeightGrid[i][j] <= -1000)
-					Game.game.groundEdgeHeightGrid[i][j] = 0;
-			}
-		}
-
 		double frac = 0;
 
 		if (this instanceof ScreenGame || this instanceof ILevelPreviewScreen || (this instanceof IOverlayScreen
@@ -120,7 +109,7 @@ public abstract class Screen implements IBatchRenderableObject
 
 		if (drawBgRect && (!(this instanceof ScreenExit) && size >= 1 && (selfBatch || (!Game.fancyTerrain && !Game.enable3d))))
 		{
-			Drawing.drawing.setColor(174 * frac + (1 - frac) * Level.currentColorR, 92 * frac + (1 - frac) * Level.currentColorG, 16 * frac + (1 - frac) * Level.currentColorB);
+			Drawing.drawing.setColor(174 * frac + (1 - frac) * Level.currentColor.red, 92 * frac + (1 - frac) * Level.currentColor.green, 16 * frac + (1 - frac) * Level.currentColor.blue);
 
 			double mul = 1;
 			if (Game.angledView)
@@ -129,18 +118,19 @@ public abstract class Screen implements IBatchRenderableObject
 			Drawing.drawing.fillShadedInterfaceRect(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2,
 					mul * Game.game.window.absoluteWidth / Drawing.drawing.interfaceScale, mul * Game.game.window.absoluteHeight / Drawing.drawing.interfaceScale);
 
-			Drawing.drawing.setColor(Level.currentColorR, Level.currentColorG, Level.currentColorB, 255.0 * size);
+			Drawing.drawing.setColor(Level.currentColor.red, Level.currentColor.green, Level.currentColor.blue, 255.0 * size);
 			Drawing.drawing.fillBackgroundRect(this, Drawing.drawing.sizeX / 2, Drawing.drawing.sizeY / 2, Drawing.drawing.sizeX, Drawing.drawing.sizeY);
 		}
 
-		Drawing.drawing.setColor(Level.currentColorR, Level.currentColorG, Level.currentColorB);
+		Drawing.drawing.setColor(Level.currentColor.red, Level.currentColor.green, Level.currentColor.blue);
 
 		if (stageOnly && Drawing.drawing.terrainRenderer instanceof StaticTerrainRenderer)
 			((StaticTerrainRenderer) Drawing.drawing.terrainRenderer).stage();
 		else
 			Drawing.drawing.terrainRenderer.draw();
 
-		Drawing.drawing.trackRenderer.draw();
+        if (!(this instanceof ScreenGame && !Game.enable3d))
+		    Drawing.drawing.trackRenderer.draw();
 
 		if (this.drawDarkness && drawBgRect)
 		{
@@ -168,15 +158,40 @@ public abstract class Screen implements IBatchRenderableObject
 
 	public void setupLayoutParameters()
 	{
-
+        resetLayout();
 	}
 
-	public void onAttemptClose()
+    public void setUnscaledLayoutParameters()
+    {
+        this.objWidth = 350;
+        this.objHeight = 40;
+        this.objXSpace = 380;
+        this.objYSpace = 60;
+
+        this.textSize = this.objHeight * 0.6;
+        this.titleSize = this.textSize * 1.25;
+    }
+
+    public void resetLayout()
+    {
+        Drawing.drawing.interfaceScaleZoom = Drawing.drawing.interfaceScaleZoomDefault;
+        Drawing.drawing.interfaceSizeX = Drawing.drawing.baseInterfaceSizeX / Drawing.drawing.interfaceScaleZoom;
+        Drawing.drawing.interfaceSizeY = Drawing.drawing.baseInterfaceSizeY / Drawing.drawing.interfaceScaleZoom;
+        this.centerX = Drawing.drawing.interfaceSizeX / 2;
+        this.centerY = Drawing.drawing.interfaceSizeY / 2;
+    }
+
+    public void onAttemptClose()
 	{
 
 	}
 
-	public static class FlashingTile implements IBatchRenderableObject
+    public void onFocusChange(boolean isFocused)
+    {
+
+    }
+
+    public static class FlashingTile implements IBatchRenderableObject
 	{
 		public boolean redrawn = false;
 		public int posX;

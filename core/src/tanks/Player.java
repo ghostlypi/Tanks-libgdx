@@ -1,6 +1,7 @@
 package tanks;
 
 import basewindow.BaseFile;
+import basewindow.Color;
 import tanks.hotbar.Hotbar;
 import tanks.hotbar.ItemBar;
 import tanks.item.Item;
@@ -16,26 +17,28 @@ import java.util.UUID;
 public class Player
 {
     public int remainingLives;
-    public Hotbar hotbar = new Hotbar();
+    public Hotbar hotbar = new Hotbar(this);
 
     public UUID clientID;
     public String username;
     public Tank tank;
+    public String buildName = "player";
+    public HashSet<String> ownedBuilds = new HashSet<>();
 
-    public int colorR = 0;
-    public int colorG = 150;
-    public int colorB = 255;
+    public long lastNudge = 0;
 
-    public int colorR2 = (int) Turret.calculateSecondaryColor(colorR);
-    public int colorG2 = (int) Turret.calculateSecondaryColor(colorG);
-    public int colorB2 = (int) Turret.calculateSecondaryColor(colorB);
+    public static final Color default_primary = new Color(0, 150, 255, 255);
+    public static final Color default_secondary = new Color(Turret.calculateSecondaryColor(default_primary.red), Turret.calculateSecondaryColor(default_primary.green), Turret.calculateSecondaryColor(default_primary.blue), 255);
+    public static final Color default_tertiary = new Color((default_primary.red + default_secondary.red) / 2, (default_primary.green + default_secondary.green) / 2, (default_primary.blue + default_secondary.blue) / 2, 255);
 
-    public int colorR3 = (this.colorR + this.colorR2) / 2;
-    public int colorG3 = (this.colorG + this.colorG2) / 2;
-    public int colorB3 = (this.colorB + this.colorB2) / 2;
+    public Color color = new Color().set(default_primary);
+    public Color color2 = new Color().set(default_secondary);
+    public Color color3 = new Color().set(default_tertiary);
 
     public boolean enableSecondaryColor = false;
     public boolean enableTertiaryColor = false;
+
+    public boolean isBot = false;
 
     protected ConnectedPlayer connectedPlayer;
 
@@ -70,7 +73,7 @@ public class Player
             else
                 c = new Crusade(Game.game.fileManager.getFile(fileName), name);
 
-            this.hotbar = new Hotbar();
+            this.hotbar = new Hotbar(this);
             this.hotbar.itemBar = new ItemBar(this);
 
             c.currentLevel = Integer.parseInt(f.nextLine());
@@ -99,14 +102,20 @@ public class Player
 
             if (f.hasNextLine())
             {
-                parseStringIntHashMap(cp.itemUses, f.nextLine());
-                parseStringIntHashMap(cp.itemHits, f.nextLine());
+                parseStringDoubleHashMap(cp.itemUses, f.nextLine());
+                parseStringDoubleHashMap(cp.itemHits, f.nextLine());
             }
 
             if (f.hasNextLine())
             {
                 parseIntHashSet(c.livingTankIDs, f.nextLine());
                 c.retry = c.livingTankIDs.size() > 0;
+            }
+
+            if (f.hasNextLine())
+            {
+                parseStringHashSet(cp.ownedBuilds, f.nextLine());
+                cp.currentBuild = f.nextLine();
             }
 
             f.stopReading();
@@ -169,6 +178,20 @@ public class Player
         }
     }
 
+    public static void parseStringDoubleHashMap(HashMap<String, Double> map, String str)
+    {
+        String[] parts = str.replace("{", "").replace("}", "").split(", ");
+
+        for (String s: parts)
+        {
+            if (s.length() <= 0)
+                continue;
+
+            String[] sec = s.split("=");
+            map.put(sec[0], Double.parseDouble(sec[1]));
+        }
+    }
+
     public static void parseIntHashSet(HashSet<Integer> set, String str)
     {
         String[] parts = str.replace("[", "").replace("]", "").split(", ");
@@ -179,6 +202,19 @@ public class Player
                 continue;
 
             set.add(Integer.parseInt(s));
+        }
+    }
+
+    public static void parseStringHashSet(HashSet<String> set, String str)
+    {
+        String[] parts = str.replace("[", "").replace("]", "").split(", ");
+
+        for (String s: parts)
+        {
+            if (s.length() <= 0)
+                continue;
+
+            set.add(s);
         }
     }
 
@@ -205,15 +241,15 @@ public class Player
         if (this == Game.player)
             this.connectedPlayer = new ConnectedPlayer(Game.player.clientID, Game.player.username);
 
-        this.connectedPlayer.colorR = this.colorR;
-        this.connectedPlayer.colorG = this.colorG;
-        this.connectedPlayer.colorB = this.colorB;
-        this.connectedPlayer.colorR2 = this.colorR2;
-        this.connectedPlayer.colorG2 = this.colorG2;
-        this.connectedPlayer.colorB2 = this.colorB2;
-        this.connectedPlayer.colorR3 = this.colorR3;
-        this.connectedPlayer.colorG3 = this.colorG3;
-        this.connectedPlayer.colorB3 = this.colorB3;
+        this.connectedPlayer.color.set(this.color);
+        this.connectedPlayer.color2.set(this.color2);
+        this.connectedPlayer.color3.set(this.color3);
+
+        if (this.tank != null && this.tank.team != null && this.tank.team.enableColor)
+            this.connectedPlayer.teamColor.set(this.tank.team.teamColor);
+        else
+            this.connectedPlayer.teamColor.set(255, 255, 255);
+
         return this.connectedPlayer;
     }
 }

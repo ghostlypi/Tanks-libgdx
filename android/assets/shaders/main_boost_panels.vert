@@ -4,6 +4,7 @@
 #extension GL_EXT_gpu_shader4 : enable
 
 uniform int time;
+uniform bool enableFancyTerrain;
 uniform float obstacleSizeFrac;
 attribute float vertexCoord;
 
@@ -46,6 +47,6 @@ void getVertVecs(out vec4 pos, out vec3 normal)
 
 vec4 getColor(vec4 colorIn)
 {
-    float offset = (sin((colorIn.a * 255.0 * 50.0 + float(time) / 300.0 * PI * 2.0) / 10.0) + 1.0) * 40.0 / 255.0;
+    float offset = float(enableFancyTerrain) * (sin((colorIn.a * 255.0 * 50.0 + float(time) / 300.0 * PI * 2.0) / 10.0) + 1.0) * 40.0 / 255.0;
     return vec4((1.0 - offset / 2.0) * colorIn.r, min(1.0, 0.7 - offset + colorIn.g) * colorIn.r, colorIn.g * colorIn.r, 1.0);
 }

@@ -1,23 +1,26 @@
 package tanks.item;
 
 import tanks.*;
+import tanks.attribute.AttributeModifier;
 import tanks.bullet.Bullet;
 import tanks.minigames.Minigame;
 import tanks.tank.Tank;
+import tanks.tankson.ICopyable;
 import tanks.tankson.Property;
 
-public class ItemBullet extends Item
+public class ItemBullet extends Item implements ICopyable<ItemBullet>
 {
 	public static final String item_class_name = "bullet";
 
 	@Property(id="bullet", category = "none")
-	public Bullet bullet = new Bullet();
+	public Bullet bullet;
 
 	public ItemBullet()
 	{
 		this.rightClick = false;
 		this.supportsHits = true;
-		this.icon = "bullet_normal.png";
+		this.icon = DefaultItemIcons.bullet_normal.getCopy();
+        this.bullet = new Bullet();
 	}
 
 	public ItemBullet(Bullet b)
@@ -36,8 +39,6 @@ public class ItemBullet extends Item
 	{
 		public double fractionUsed = 0;
 		public int liveBullets;
-
-		public int networkIndex = 0;
 
 		public ItemStackBullet(Player p, ItemBullet item, int max)
 		{
@@ -64,11 +65,11 @@ public class ItemBullet extends Item
 
 				int q = (int) Math.min(this.item.bullet.shotCount, Math.ceil(remainingQty / useAmt));
 
-				double speedmul = m.getAttributeValue(AttributeModifier.bullet_speed, 1);
+				double speedmul = m.em().getAttributeValue(AttributeModifier.bullet_speed, 1);
 
-				if (this.item.bullet.shotSound != null)
+				if (this.item.bullet.shotSound != null && this.item.bullet.soundVolume > 0)
 					Drawing.drawing.playGlobalSound(this.item.bullet.shotSound,
-							(float) ((Bullet.bullet_size / this.item.bullet.size) * this.item.bullet.pitch * (1 - (Math.random() * 0.5) * this.item.bullet.pitchVariation)),
+							(float) (this.item.bullet.pitch * (1 - (Math.random() * 0.5) * this.item.bullet.pitchVariation)),
 							(float) this.item.bullet.soundVolume);
 
 				for (int i = 0; i < q; i++)
@@ -113,9 +114,8 @@ public class ItemBullet extends Item
 						this.fractionUsed--;
 					}
 
-					// TODO: make this work with fraction used, involves fixing the hits too
 					if (Crusade.crusadeMode && Crusade.currentCrusade != null && this.player != null)
-						Crusade.currentCrusade.getCrusadePlayer(this.player).addItemUse(this);
+						Crusade.currentCrusade.getCrusadePlayer(this.player).addItemUse(this, useAmt);
 
 					if (this.stackSize <= 0 && !unlimited)
 						this.destroy = true;

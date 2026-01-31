@@ -4,7 +4,7 @@ import tanks.Drawing;
 import tanks.Game;
 import tanks.gui.Button;
 import tanks.gui.ButtonList;
-import tanks.gui.SearchBox;
+import tanks.gui.SearchBoxInstant;
 import tanks.minigames.Minigame;
 
 import java.lang.reflect.InvocationTargetException;
@@ -17,7 +17,7 @@ public class ScreenMinigames extends Screen
 
 	public static int page = 0;
 
-	SearchBox search = new SearchBox(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
+	SearchBoxInstant search = new SearchBoxInstant(this.centerX, this.centerY - this.objYSpace * 4, this.objWidth * 1.25, this.objHeight, "Search", new Runnable()
 	{
 		@Override
 		public void run()
@@ -94,6 +94,6 @@ public class ScreenMinigames extends Screen
 
 		Drawing.drawing.setInterfaceFontSize(this.titleSize);
 		Drawing.drawing.setColor(0, 0, 0);
-		Drawing.drawing.drawInterfaceText(this.centerX, this.centerY - this.objYSpace * 5, "Minigames");
+		Drawing.drawing.displayInterfaceText(this.centerX, this.centerY - this.objYSpace * 5, "Minigames");
 	}
 }

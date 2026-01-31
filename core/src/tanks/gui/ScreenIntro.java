@@ -38,6 +38,13 @@ public class ScreenIntro extends Screen
         {
             if (Game.cinematic)
                 nextScreen = new ScreenCinematicTitle();
+            else if (Game.steamLobbyInvite != -1)
+            {
+                if (Game.player.username.isEmpty())
+                    nextScreen = new ScreenUsernamePrompt();
+                else
+                    nextScreen = new ScreenAcceptSteamInvite();
+            }
             else
             {
                 nextScreen = new ScreenTitle();
@@ -103,7 +110,7 @@ public class ScreenIntro extends Screen
             Game.game.window.loadPerspective();
         }
 
-        Drawing.drawing.setColor(Level.currentColorR, Level.currentColorG, Level.currentColorB);
+        Drawing.drawing.setColor(Level.currentColor.red, Level.currentColor.green, Level.currentColor.blue);
         Drawing.drawing.fillInterfaceRect(Drawing.drawing.interfaceSizeX / 2, Drawing.drawing.interfaceSizeY / 2, Game.game.window.absoluteWidth * 1.2 / Drawing.drawing.interfaceScale, Game.game.window.absoluteHeight * 1.2 / Drawing.drawing.interfaceScale);
 
         if (lastTime - startTime >= introTime && Game.fancyTerrain)

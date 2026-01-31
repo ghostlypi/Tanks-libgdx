@@ -1,6 +1,10 @@
 #define DEPTH_OFFSET 0.004
 #define LIGHT_SCALE 32.0
 
+#define BLEND_TRANSPARENT 0
+#define BLEND_GLOW 1
+#define BLEND_LIGHT 2
+
 //uniform vec3 lightVec;
 
 //uniform bool customLight;
@@ -54,6 +58,8 @@ uniform float scale;
 uniform int lightsCount;
 uniform int lightsTexSize;
 uniform sampler2D lightsTexture;
+
+uniform int blendFunc;
 
 float rescale(float f)
 {
@@ -266,6 +272,9 @@ void main(void)
         if (depthtest)
             gl_FragColor.xyz *= maxLight;
     }
+
+    if (blendFunc == BLEND_GLOW || blendFunc == BLEND_LIGHT)
+        gl_FragColor.rgb *= gl_FragColor.a;
 
 //    gl_FragColor = vec4(light, gl_FragColor.gba);
 

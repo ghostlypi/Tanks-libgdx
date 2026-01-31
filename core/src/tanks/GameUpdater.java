@@ -10,31 +10,20 @@ public class GameUpdater implements IUpdater
 	{
 		try
 		{
-			if (Game.enableExtensions)
-			{
-				for (int i = 0; i < Game.extensionRegistry.extensions.size(); i++)
-				{
-					Extension e = Game.extensionRegistry.extensions.get(i);
-
-					e.preUpdate();
-				}
-			}
+            for (Extension e: Game.extensionRegistry.extensions)
+                e.preUpdate();
 
 			Panel.panel.update();
 
-			if (Game.enableExtensions)
-			{
-				for (int i = 0; i < Game.extensionRegistry.extensions.size(); i++)
-				{
-					Extension e = Game.extensionRegistry.extensions.get(i);
-
-					e.update();
-				}
-			}
+            for (Extension e: Game.extensionRegistry.extensions)
+                e.update();
 		}
 		catch (Throwable e)
 		{
-			Game.exitToCrash(e);
+			if (e instanceof GameCrashedException)
+				Game.displayCrashScreen(((GameCrashedException) e).originalException);
+			else
+				Game.displayCrashScreen(e);
 		}
 	}
 }

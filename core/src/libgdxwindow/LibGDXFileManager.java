@@ -35,8 +35,9 @@ public class LibGDXFileManager extends BaseFileManager
     public void openFileManager(String path)
     {
         String f = new LibGDXFile(path).file.toString();
-        if (f.startsWith("/"))
+        if (f.startsWith("/") && f.length() > 1)
             f = f.substring(1);
+        System.out.println("OPEN <" + f + ">");
 
         if (Gdx.app.getType() == Application.ApplicationType.iOS)
             Gdx.net.openURI("shareddocuments://" + Gdx.files.getExternalStoragePath().toString() + f);

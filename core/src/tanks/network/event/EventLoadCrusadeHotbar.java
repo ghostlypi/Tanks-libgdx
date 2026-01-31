@@ -51,6 +51,7 @@ public class EventLoadCrusadeHotbar extends PersonalEvent
         if (this.clientID == null)
         {
             Game.player.hotbar.enabledItemBar = true;
+            Game.player.hotbar.itemBar.showItems = true;
             Game.player.hotbar.enabledCoins = true;
         }
 
@@ -60,5 +61,8 @@ public class EventLoadCrusadeHotbar extends PersonalEvent
             ((ScreenGame)(Game.screen)).title = this.title;
 
         ((ScreenGame)(Game.screen)).subtitle = this.subtitle;
+
+        if (Game.playerTank != null)
+            Game.playerTank.updateAbilities();
     }
 }

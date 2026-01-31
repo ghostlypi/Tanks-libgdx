@@ -17,6 +17,12 @@ public class NoFontRenderer extends BaseFontRenderer
     }
 
     @Override
+    public void drawString(double x, double y, double z, double sX, double sY, String s, boolean depth)
+    {
+
+    }
+
+    @Override
     public void drawString(double x, double y, double z, double sX, double sY, String s)
     {
 
@@ -38,5 +44,11 @@ public class NoFontRenderer extends BaseFontRenderer
     public double getStringSizeY(double sY, String s)
     {
         return 0;
+    }
+
+    @Override
+    public void addFont(String imageFile, String chars, int[] charSizes)
+    {
+
     }
 }
