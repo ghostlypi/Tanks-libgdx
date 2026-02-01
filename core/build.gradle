@@ -1,8 +1,14 @@
-apply plugin: "java"
-
-sourceCompatibility = 1.8
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+eclipse.project.name = appName + '-core'
 
-sourceSets.main.java.srcDirs = [ "src/" ]
+dependencies {
+  api "com.badlogicgames.gdx:gdx:$gdxVersion"
+  api "games.rednblack.miniaudio:miniaudio:$miniaudioVersion"
+  api 'io.netty:netty-all:4.1.25.Final'
+  implementation 'com.code-disaster.steamworks4j:steamworks4j:1.10.0'
+  implementation 'com.code-disaster.steamworks4j:steamworks4j-lwjgl3:1.10.0'
 
-eclipse.project.name = appName + "-core"
+  if(enableGraalNative == 'true') {
+    implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
+  }
+}

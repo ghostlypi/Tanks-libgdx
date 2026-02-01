@@ -13,8 +13,8 @@
         android:label="@string/app_name"
         android:theme="@style/GdxTheme">
         <activity
-            android:name="theopalgames.tanks.AndroidLauncher"
-            android:label="@string/app_name" 
+            android:name="theopalgames.tanks.android.AndroidLauncher"
+            android:label="@string/app_name"
             android:screenOrientation="landscape"
             android:exported="true"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout">
