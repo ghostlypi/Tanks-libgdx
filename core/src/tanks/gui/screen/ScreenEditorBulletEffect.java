@@ -10,9 +10,11 @@ import tanks.gui.Button;
 import tanks.gui.EmptySpace;
 import tanks.gui.ITrigger;
 import tanks.gui.SelectorColor;
-import tanks.tank.TankPlayer;
 import tanks.tank.Turret;
-import tanks.tankson.*;
+import tanks.tankson.ArrayListIndexPointer;
+import tanks.tankson.FieldPointer;
+import tanks.tankson.Pointer;
+import tanks.tankson.Property;
 import tanks.translation.Translation;
 
 import java.io.IOException;
@@ -363,6 +365,9 @@ public class ScreenEditorBulletEffect extends ScreenEditorTanksONable<BulletEffe
 
         super.draw();
 
+        if (Game.screen instanceof ScreenInfo)
+            return;
+
         if (this.message != null)
             return;
 
@@ -498,6 +503,7 @@ public class ScreenEditorBulletEffect extends ScreenEditorTanksONable<BulletEffe
 
         public void setupTrails()
         {
+            screen.setupLayoutParameters();
             this.trails = screen.target.get().trailEffects;
             this.buttons.clear();
             for (int i = 0; i < this.trails.size(); i++)

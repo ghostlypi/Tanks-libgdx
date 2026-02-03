@@ -793,7 +793,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
     {
         this.paused = false;
 
-        if (mouse)
+        if (mouse && Game.playerTank != null)
             Game.playerTank.setBufferCooldown(null, 20);
 
         if (Game.currentLevel.synchronizeMusic && !(ScreenPartyHost.isServer || ScreenPartyLobby.isClient) && playing)

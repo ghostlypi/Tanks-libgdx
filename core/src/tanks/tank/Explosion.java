@@ -3,6 +3,7 @@ package tanks.tank;
 import tanks.*;
 import tanks.attribute.AttributeModifier;
 import tanks.bullet.Bullet;
+import tanks.bullet.BulletPropertyCategory;
 import tanks.gui.ChatMessage;
 import tanks.gui.screen.ScreenGame;
 import tanks.gui.screen.ScreenPartyHost;
@@ -25,6 +26,9 @@ public class Explosion extends Movable implements ICopyable<Explosion>, ITanksON
 
     @Property(id = "damage", name = "Damage", desc = "The default player tank has 1 hitpoint, and the default bullet does 1 hitpoint of damage")
     public double damage = 2;
+
+    @Property(id = "max_extra_health", minValue = 0.0, name = "Max extra hitpoints", desc = "Applicable if damage is negative: this explosion will not heal a tank to more than its default hitpoints plus 'max extra hitpoints'")
+    public double maxExtraHealth = 1;
 
     @Property(id = "destroys_obstacles", name = "Destroys blocks")
     public boolean destroysObstacles = true;
@@ -247,6 +251,7 @@ public class Explosion extends Movable implements ICopyable<Explosion>, ITanksON
             if (!(Team.isAllied(this, m) && !this.team.friendlyFire) && !ScreenGame.finishedQuick)
             {
                 Tank t = (Tank) m;
+                double health = t.health;
                 boolean kill = t.damage(this.damage, this);
 
                 if (kill)
@@ -284,8 +289,16 @@ public class Explosion extends Movable implements ICopyable<Explosion>, ITanksON
                             Game.eventsOut.add(new EventUpdateCoins(((TankPlayerRemote) this.tank).player));
                     }
                 }
-                else if (damage > 0)
-                    Drawing.drawing.playGlobalSound("damage.ogg");
+                else
+                {
+                    if (damage > 0)
+                        Drawing.drawing.playGlobalSound("damage.ogg");
+                    else if (damage < 0)
+                    {
+                        float pitch = (float) ((Math.min(t.health, t.baseHealth + this.maxExtraHealth) / (t.baseHealth + this.maxExtraHealth) / 2) + 1f) / 2;
+                        Drawing.drawing.playGlobalSound("heal_impact_2.ogg", pitch);
+                    }
+                }
             }
         }
         else if (m instanceof Mine && !m.destroy)

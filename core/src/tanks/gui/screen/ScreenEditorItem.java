@@ -1,17 +1,15 @@
 package tanks.gui.screen;
 
 import basewindow.BaseFile;
-import basewindow.Color;
 import tanks.Drawing;
 import tanks.Game;
 import tanks.Level;
-import tanks.bullet.*;
 import tanks.gui.Button;
 import tanks.gui.ITrigger;
 import tanks.gui.SelectorItemIcon;
-import tanks.item.*;
-import tanks.tank.Mine;
-import tanks.tank.TankPlayer;
+import tanks.item.Item;
+import tanks.item.ItemBullet;
+import tanks.item.ItemMine;
 import tanks.tankson.FieldPointer;
 import tanks.tankson.Pointer;
 import tanks.tankson.Property;
@@ -252,6 +250,9 @@ public class ScreenEditorItem extends ScreenEditorTanksONable<Item.ItemStack<?>>
         {
             this.objectEditorScreen.draw();
 
+            if (Game.screen instanceof ScreenInfo)
+                return;
+
             if (this.objectEditorScreen.currentTab == null)
             {
                 Drawing.drawing.setInterfaceFontSize(this.titleSize);
@@ -269,6 +270,9 @@ public class ScreenEditorItem extends ScreenEditorTanksONable<Item.ItemStack<?>>
         }
         else
             super.draw();
+
+        if (Game.screen instanceof ScreenInfo)
+            return;
 
         if (this.showLoadFromTemplate)
             load.draw();

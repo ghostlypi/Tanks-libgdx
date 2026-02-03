@@ -321,7 +321,7 @@ public class BulletInstant extends Bullet
 
 	}
 
-    public void drawForInterface(double x, double width, double y, double size, ArrayList<Effect> effects, Random r, Color base, Color turret)
+    public void drawForInterface(double x, double width, double y, double size, ArrayList<Effect> effects, ArrayList<Effect> removeEffects, Random r, Color base, Color turret)
     {
         double l = 800;
         double start = x - l / 2;
