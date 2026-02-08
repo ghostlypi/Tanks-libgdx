@@ -1,7 +1,6 @@
 package theopalgames.tanks.android;
 
 import android.content.Context;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
@@ -77,13 +76,13 @@ public class AndroidLauncher extends AndroidApplication {
                 path = "/";
 
             if (file.isDirectory()) {
-                System.out.println("ME! DI: " + file.path());
                 migrateDir(file, basePath);
+                file.deleteDirectory();
             } else {
-                System.out.println("ME! FI: " + path);
                 FileHandle dest = Gdx.files.external(path);
                 dest.parent().mkdirs();
                 dest.writeBytes(file.readBytes(), false);
+                file.delete();
             }
         }
     }

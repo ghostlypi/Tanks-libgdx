@@ -12,13 +12,6 @@ import libgdxwindow.LibGDXWindow;
 import tanks.*;
 import tanks.gui.screen.ScreenExit;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Scanner;
-
 public class Tanks extends ApplicationAdapter
 {
 	public static Tanks instance;
@@ -46,6 +39,7 @@ public class Tanks extends ApplicationAdapter
             Game.framework = Game.Framework.libgdx;
             Game.initScript();
             Game.game.window = window;
+            Game.pauseOnLostFocus = false;
         }
 //        catch (Exception e)
 //        {
