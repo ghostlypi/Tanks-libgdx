@@ -30,4 +30,10 @@ public class IOSPlatformHandler extends BasePlatformHandler
         NSURL url = new NSURL(uri);
         UIApplication.getSharedApplication().openURL(url, null, null);
     }
+
+    @Override
+    public void openFolder(String url)
+    {
+
+    }
 }
