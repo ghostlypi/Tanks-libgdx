@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.provider.DocumentsContract;
+
 import basewindow.BasePlatformHandler;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.backends.android.AndroidApplication;
@@ -17,6 +19,7 @@ public class AndroidPlatformHandler extends BasePlatformHandler
     }
 
     @Override
+
     public void openLink(String url)
     {
         Uri uri = Uri.parse(url);
@@ -28,8 +31,29 @@ public class AndroidPlatformHandler extends BasePlatformHandler
             public void run () {
                 Intent intent = new Intent(Intent.ACTION_VIEW, uri);
                 // LiveWallpaper and Daydream applications need this flag
-                if (!(((AndroidApplication)Gdx.app).getContext() instanceof Activity))
+                if (!(((AndroidApplication)Gdx.app).getContext() instanceof Activity)) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                }
+                ((AndroidApplication)Gdx.app).startActivity(intent);
+            }
+        });
+    }
+
+    @Override
+    public void openFolder(String url) {
+        String path = url.replace("file:///storage/emulated/0/", "");
+        String treeId = "primary:" + path.replace("/", "%2F");
+        Uri uri = Uri.parse("content://com.android.externalstorage.documents/tree/" + treeId);
+        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(uri,
+            DocumentsContract.getTreeDocumentId(uri));
+        Intent intent = new Intent(Intent.ACTION_VIEW, docUri);
+        PackageManager pm = ((AndroidApplication) Gdx.app).getContext().getPackageManager();
+        pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        ((AndroidApplication)Gdx.app).runOnUiThread(new Runnable() {
+            @Override
+            public void run () {
+                intent.setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 ((AndroidApplication)Gdx.app).startActivity(intent);
             }
         });

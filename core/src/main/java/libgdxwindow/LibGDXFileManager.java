@@ -2,6 +2,8 @@ package libgdxwindow;
 
 import basewindow.BaseFile;
 import basewindow.BaseFileManager;
+import theopalgames.tanks.Tanks;
+
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
@@ -41,7 +43,11 @@ public class LibGDXFileManager extends BaseFileManager
 
         if (Gdx.app.getType() == Application.ApplicationType.iOS)
             Gdx.net.openURI("shareddocuments://" + Gdx.files.getExternalStoragePath().toString() + f);
+        else if (Gdx.app.getType() == Application.ApplicationType.Android)
+            Tanks.platformHandler.openFolder("file://" + Gdx.files.getExternalStoragePath().toString() + f);
         else
             Gdx.net.openURI("file://" + Gdx.files.getExternalStoragePath().toString() + f);
     }
+
+
 }

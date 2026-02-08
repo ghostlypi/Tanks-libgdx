@@ -24,7 +24,7 @@ public class LibGDXFile extends BaseFile
     {
         super(path);
 
-        if (Tanks.window.appType == Application.ApplicationType.iOS)
+        if (Tanks.window.appType == Application.ApplicationType.iOS || Tanks.window.appType == Application.ApplicationType.Android)
         {
             path = path.replace("/.tanks/", "/");
             if (path.equals("/.tanks"))
