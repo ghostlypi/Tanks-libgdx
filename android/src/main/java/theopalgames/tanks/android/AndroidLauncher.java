@@ -12,6 +12,7 @@ import com.badlogic.gdx.backends.android.AndroidApplication;
 import com.badlogic.gdx.backends.android.AndroidApplicationConfiguration;
 import com.badlogic.gdx.backends.android.AndroidAudio;
 import com.badlogic.gdx.backends.android.DefaultAndroidFiles;
+import com.badlogic.gdx.files.FileHandle;
 
 import libgdxwindow.LibGDXAsyncMiniAudioSoundPlayer;
 import tanks.Game;
@@ -52,11 +53,38 @@ public class AndroidLauncher extends AndroidApplication {
         Tanks.platformHandler = new AndroidPlatformHandler();
 
         initialize(new Tanks(), config);
+        file_migration();
     }
 
     @Override
     public AndroidAudio createAudio(Context context, AndroidApplicationConfiguration config) {
         LibGDXAsyncMiniAudioSoundPlayer.miniAudio.setupAndroid(context.getAssets());
         return super.createAudio(context, config);
+    }
+
+    public void file_migration() {
+        FileHandle localDir = Gdx.files.local("/.tanks");
+        if (!localDir.exists())
+            return;
+        migrateDir(localDir, "/.tanks");
+    }
+
+    private void migrateDir(FileHandle dir, String basePath) {
+        for (FileHandle file : dir.list()) {
+            String path = file.path();
+            path = path.substring(path.indexOf(basePath) + basePath.length());
+            if (path.isEmpty())
+                path = "/";
+
+            if (file.isDirectory()) {
+                System.out.println("ME! DI: " + file.path());
+                migrateDir(file, basePath);
+            } else {
+                System.out.println("ME! FI: " + path);
+                FileHandle dest = Gdx.files.external(path);
+                dest.parent().mkdirs();
+                dest.writeBytes(file.readBytes(), false);
+            }
+        }
     }
 }
