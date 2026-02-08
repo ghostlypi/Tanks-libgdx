@@ -16,7 +16,10 @@ import tanks.obstacle.ObstacleBeatBlock;
 import tanks.registry.RegistryTank;
 import tanks.tank.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Random;
 
 public class Level
 {
@@ -40,8 +43,7 @@ public class Level
 	public boolean remote = false;
 	public boolean preview = false;
 
-	public boolean timed = false;
-	public double timer;
+	public double timer = -1;
 
 	public int startX, startY;
 	public int sizeX, sizeY;
@@ -54,9 +56,7 @@ public class Level
 	public double light = 1.0;
 	public double shadow = 0.5;
 
-	public HashMap<String, Team> teamsMap = new HashMap<>();
-
-	public ArrayList<Team> teamsList = new ArrayList<>();
+	public LinkedHashMap<String, Team> teamsMap = new LinkedHashMap<>();
 
 	public ArrayList<Integer> availablePlayerSpawns = new ArrayList<>();
 
@@ -79,7 +79,7 @@ public class Level
 
 	public ArrayList<TankAIControlled> customTanks;
 
-	public HashMap<String, Integer> itemNumbers = new HashMap<>();
+	public LinkedHashMap<String, Integer> itemNumbers = new LinkedHashMap<>();
 
 	public double startTime = 400;
 	public boolean disableFriendlyFire = false;
@@ -210,8 +210,6 @@ public class Level
 							tankTeams[i].friendlyFire = false;
 
 						teamsMap.put(t[0], tankTeams[i]);
-
-						teamsList.add(tankTeams[i]);
 					}
 				}
 				else
@@ -263,10 +261,7 @@ public class Level
 			int length = (int) Double.parseDouble(screen[8]) * 100;
 
 			if (length > 0)
-			{
-				this.timed = true;
-				this.timer = length;
-			}
+			    this.timer = length;
 		}
 
 		if (screen.length >= 11)
@@ -755,11 +750,9 @@ public class Level
 
 				teamsMap.put("ally", player);
 				teamsMap.put("enemy", enemy);
-				this.teamsList.add(player);
-				this.teamsList.add(enemy);
 			}
 
-			s.teams = this.teamsList;
+			s.teams = new ArrayList<>(teamsMap.values());
 			if (s.teams.size() > 0)
 			{
 				s.currentMetadata.put(SelectorTeam.player_selector_name, s.teams.get(0));
@@ -781,6 +774,24 @@ public class Level
 
     public static void broadcastBuilds(ArrayList<TankPlayer.ShopTankBuild> builds)
     {
+        for (Player p: Game.players)
+        {
+            p.ownedBuilds.add(builds.get(0).name);
+
+            boolean found = false;
+            for (TankPlayer.ShopTankBuild b: builds)
+            {
+                if (b.name.equals(p.buildName))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+                p.buildName = builds.get(0).name;
+        }
+
         for (ServerHandler h : ScreenPartyHost.server.connections)
         {
             if (h.player != null)

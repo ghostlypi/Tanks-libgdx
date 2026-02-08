@@ -1,9 +1,9 @@
 package tanksonline.screen;
 
+import tanks.network.event.online.EventSilentDisconnect;
 import tanks.gui.Button;
 import tanks.gui.UUIDTextBox;
 import tanks.gui.screen.ScreenOnline;
-import tanks.network.event.online.EventSilentDisconnect;
 import tanksonline.AccessCode;
 import tanksonline.PlayerMap;
 import tanksonline.TanksOnlinePlayer;

@@ -990,8 +990,11 @@ public abstract class Tank extends Movable implements ISolidObject
 		double finalAmount = amount * this.getDamageMultiplier(source);
 		this.health -= finalAmount;
 
-		if (source instanceof Bullet && ((Bullet) source).maxExtraHealth > 0 && amount < 0)
+		if (source instanceof Bullet && amount < 0)
 			this.health = Math.max(prev, Math.min(this.health, this.baseHealth + ((Bullet) source).maxExtraHealth));
+
+        if (source instanceof Explosion && amount < 0)
+            this.health = Math.max(prev, Math.min(this.health, this.baseHealth + ((Explosion) source).maxExtraHealth));
 
 		if (this.health <= 1)
             em().removeAttribute(AttributeModifier.healray);

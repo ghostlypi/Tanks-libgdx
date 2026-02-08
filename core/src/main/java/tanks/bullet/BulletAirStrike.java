@@ -67,6 +67,8 @@ public class BulletAirStrike extends Bullet
     @Override
     public void update()
     {
+        this.range = 0;
+
         if (this.age <= 0)
         {
             this.initialX = this.posX;

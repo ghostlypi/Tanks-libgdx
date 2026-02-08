@@ -2518,7 +2518,6 @@ public class ScreenLevelEditor extends Screen implements ILevelPreviewScreen
 
         Game.currentLevel = new Level(Game.currentLevelString);
         Game.currentLevel.tilesRandomSeed = level.tilesRandomSeed;
-        Game.currentLevel.timed = level.timer > 0;
         Game.currentLevel.timer = level.timer;
 
         for (Obstacle o : Game.obstacles)

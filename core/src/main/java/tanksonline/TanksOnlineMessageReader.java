@@ -2,10 +2,10 @@ package tanksonline;
 
 import io.netty.buffer.ByteBuf;
 import tanks.Game;
-import tanks.network.MessageReader;
-import tanks.network.NetworkEventMap;
 import tanks.network.event.*;
 import tanks.network.event.online.IOnlineServerEvent;
+import tanks.network.MessageReader;
+import tanks.network.NetworkEventMap;
 
 import java.util.UUID;
 
@@ -100,9 +100,7 @@ public class TanksOnlineMessageReader
             ((PersonalEvent) e).clientID = clientID;
         }
 
-        if (e instanceof EventPing)
-            return true;
-        else if (e instanceof IOnlineServerEvent)
+        if (e instanceof IOnlineServerEvent)
             ((IOnlineServerEvent) e).execute(s);
         else if (e instanceof EventSendClientDetails)
             s.sendEventAndClose(new EventKick("This is not the party you are looking for..."));

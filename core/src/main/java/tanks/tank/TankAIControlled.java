@@ -548,7 +548,7 @@ public class TankAIControlled extends Tank implements ITankField
 	public void initialize()
 	{
 		this.baseMaxSpeed = this.maxSpeed;
-		this.dealsDamage = !this.isSupportTank();
+		this.dealsDamage = !(this.isSupportTank() || this.shootAIType == ShootAI.none);
 		this.baseColor.set(this.color);
 		this.idleTimer = (this.random.nextDouble() * turretIdleTimerRandom) + turretIdleTimerBase;
 
@@ -1789,7 +1789,7 @@ public class TankAIControlled extends Tank implements ITankField
 			}
 			else
 			{
-				if (!(m == null) && !Team.isAllied(m, this) && m instanceof Tank && !((Tank) m).hidden)
+				if (!(m == null) && !Team.isAllied(m, this) && m instanceof Tank && !((Tank) m).hidden && ((Tank) m).currentlyTargetable)
 				{
 					this.distance = Movable.distanceBetween(this, m);
 					this.shoot(false);
@@ -3062,7 +3062,7 @@ public class TankAIControlled extends Tank implements ITankField
 
 	public boolean isSupportTank()
 	{
-		return !this.suicidal && (!this.getBullet().isHarmful() || this.shootAIType == ShootAI.none);
+		return !this.suicidal && !this.getBullet().isHarmful();
 	}
 
 	public void setPolarAcceleration(double angle, double acceleration)

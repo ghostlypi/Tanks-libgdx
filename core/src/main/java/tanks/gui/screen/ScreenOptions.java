@@ -7,6 +7,7 @@ import tanks.Game;
 import tanks.Panel;
 import tanks.gui.Button;
 import tanks.hotbar.Hotbar;
+import tanks.network.SteamNetworkHandler;
 import tanks.tank.TankPlayer;
 import tanks.tank.TankPlayerRemote;
 import tanks.tank.Turret;
@@ -251,7 +252,8 @@ public class ScreenOptions extends Screen
 			f.println("steam_visibility=" + Game.steamVisibility.ordinal());
 			f.println("chat_filter=" + Game.enableChatFilter);
 			f.println("auto_ready=" + Game.autoReady);
-			f.println("anticheat=" + TankPlayerRemote.checkMotion);
+            f.println("show_public_party_count=" + SteamNetworkHandler.showPublicPartyCount);
+            f.println("anticheat=" + TankPlayerRemote.checkMotion);
 			f.println("anticheat_weak=" + TankPlayerRemote.weakTimeCheck);
 			f.println("disable_party_friendly_fire=" + Game.disablePartyFriendlyFire);
 			f.println("party_countdown=" + Game.partyStartTime);
@@ -459,6 +461,9 @@ public class ScreenOptions extends Screen
 					case "auto_ready":
 						Game.autoReady = Boolean.parseBoolean(optionLine[1]);
 						break;
+                    case "show_public_party_count":
+                        SteamNetworkHandler.showPublicPartyCount = Boolean.parseBoolean(optionLine[1]);
+                        break;
 					case "anticheat":
 						TankPlayerRemote.checkMotion = Boolean.parseBoolean(optionLine[1]);
 						break;

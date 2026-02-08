@@ -4,14 +4,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.util.ReferenceCountUtil;
+import tanks.network.event.INetworkEvent;
+import tanks.network.event.online.EventAddMenuButton;
+import tanks.network.event.online.EventRemoveMenuButton;
 import tanks.gui.Button;
 import tanks.gui.screen.ScreenOverlayOnline;
 import tanks.network.NetworkEventMap;
 import tanks.network.SynchronizedList;
-import tanks.network.event.EventPing;
-import tanks.network.event.INetworkEvent;
-import tanks.network.event.online.EventAddMenuButton;
-import tanks.network.event.online.EventRemoveMenuButton;
 import tanksonline.screen.ScreenLayout;
 
 import java.util.UUID;
@@ -98,9 +97,6 @@ public class TanksOnlineServerHandler extends ChannelInboundHandlerAdapter
 
             synchronized (this.events)
             {
-                EventPing k = new EventPing();
-                this.events.add(k);
-
                 for (int i = 0; i < this.events.size(); i++)
                 {
                     INetworkEvent e = this.events.get(i);
