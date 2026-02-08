@@ -690,7 +690,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
             startNow.posX -= 20;
         }
 
-        if (Game.currentLevel != null && Game.currentLevel.timed)
+        if (Game.currentLevel != null && Game.currentLevel.timer > -1)
         {
             this.timeRemaining = Game.currentLevel.timer;
         }
@@ -793,7 +793,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
     {
         this.paused = false;
 
-        if (mouse)
+        if (mouse && Game.playerTank != null)
             Game.playerTank.setBufferCooldown(null, 20);
 
         if (Game.currentLevel.synchronizeMusic && !(ScreenPartyHost.isServer || ScreenPartyLobby.isClient) && playing)
@@ -1093,7 +1093,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
                 this.playedIntro = true;
                 if (Game.currentLevel instanceof Minigame && ((Minigame) Game.currentLevel).customIntroMusic)
                     Drawing.drawing.playSound(((Minigame) Game.currentLevel).introMusic, 1f, true);
-                else if (Game.currentLevel != null && Game.currentLevel.timed)
+                else if (Game.currentLevel != null && Game.currentLevel.timer > -1)
                     Drawing.drawing.playSound("battle_timed_intro.ogg", 1f, true);
                 else if (Level.isDark())
                     Drawing.drawing.playSound("battle_night_intro.ogg", 1f, true);
@@ -1167,7 +1167,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
             }
             else if (!finishedQuick)
             {
-                if (Game.currentLevel != null && Game.currentLevel.timed)
+                if (Game.currentLevel != null && Game.currentLevel.timer > -1)
                 {
                     if (this.paused || Game.playerTank == null || Game.playerTank.destroy)
                         this.music = "battle_timed_paused.ogg";
@@ -1207,7 +1207,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
 
             if (!this.paused && !showRankings && !ScreenGame.finishedQuick)
             {
-                if (!Game.currentLevel.timed && !dead)
+                if (Game.currentLevel.timer <= -1 && !dead)
                 {
                     for (Movable m : Game.movables)
                     {
@@ -1778,7 +1778,7 @@ public class ScreenGame extends Screen implements IHiddenChatboxScreen, IPartyGa
                     Crusade.currentCrusade.timePassed += Panel.frameFrequency;
             }
 
-            if (Game.currentLevel != null && Game.currentLevel.timed)
+            if (Game.currentLevel != null && Game.currentLevel.timer > -1)
             {
                 if (!finishedQuick)
                 {

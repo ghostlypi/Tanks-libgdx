@@ -389,7 +389,7 @@ public class Hotbar
 			Drawing.drawing.drawInterfaceText(x - 20, y, "" + count, true);
 		}
 
-		if (Game.currentLevel != null && (Game.currentLevel.timed && Game.screen instanceof ScreenGame))
+		if (Game.currentLevel != null && (Game.currentLevel.timer > -1 && Game.screen instanceof ScreenGame))
 		{
 			int secondsTotal = (int) (((ScreenGame) Game.screen).timeRemaining / 100 + 0.5);
 			double secondsFrac = (((ScreenGame) Game.screen).timeRemaining / 100 + 0.5) - secondsTotal;
