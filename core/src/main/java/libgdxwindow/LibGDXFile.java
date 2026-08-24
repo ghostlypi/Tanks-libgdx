@@ -29,7 +29,11 @@ public class LibGDXFile extends BaseFile
             path = path.replace("/.tanks/", "/");
             if (path.equals("/.tanks"))
                 path = "/";
-            this.file = Gdx.files.external(path);
+
+            if (Tanks.window.appType == Application.ApplicationType.Android)
+                this.file = Gdx.files.local(path);
+            else
+                this.file = Gdx.files.external(path);
         }
         else
             this.file = Gdx.files.local(path);

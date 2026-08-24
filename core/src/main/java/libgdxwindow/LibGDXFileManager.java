@@ -13,10 +13,17 @@ import java.util.Arrays;
 
 public class LibGDXFileManager extends BaseFileManager
 {
+    public interface FileCreator
+    {
+        BaseFile create(String path);
+    }
+
+    public static FileCreator fileCreator = LibGDXFile::new;
+
     @Override
     public BaseFile getFile(String file)
     {
-        return new LibGDXFile(file);
+        return fileCreator.create(file);
     }
 
     @Override

@@ -162,7 +162,7 @@ public class Panel
 		}
 
 		double scale = 1;
-		if (Game.game.window.touchscreen && Game.game.window.pointHeight > 0 && Math.min(Game.game.window.pointHeight, Game.game.window.pointWidth) <= 500)
+		if (Game.game.window.touchscreen && Game.game.window.pointHeight > 0 && Math.min(Game.game.window.pointHeight, Game.game.window.pointWidth) <= 600)
 		{
 			scale = 1.25;
 

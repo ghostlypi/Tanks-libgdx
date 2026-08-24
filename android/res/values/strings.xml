@@ -2,5 +2,8 @@
 <resources>
 
     <string name="app_name">Tanks</string>
-
+    <string name="saf_folder_picker_title">Select Data Folder</string>
+    <string name="saf_folder_picker_message">Tanks needs a folder to store game data. In the next screen, please create a new folder (we recommend naming it \'Tanks\') and then select it.</string>
+    <string name="saf_folder_picker_button_proceed">Proceed</string>
+    <string name="saf_folder_picker_button_back">Go Back</string>
 </resources>
