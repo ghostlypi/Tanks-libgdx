@@ -1449,6 +1449,10 @@ public class LibGDXWindow extends BaseWindow
     public String readFileAsString(String h)
     {
         ArrayList<String> s = Game.game.fileManager.getInternalFileContents(h);
+
+        if (s == null)
+            throw new RuntimeException("Internal file not found: " + h);
+
         StringBuilder b = new StringBuilder();
 
         for (String ss: s)

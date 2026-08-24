@@ -1,7 +1,8 @@
+apply plugin: 'com.android.application'
+
 android {
     namespace "theopalgames.tanks"
-    buildToolsVersion "34-rc1"
-    compileSdkVersion 35
+    compileSdkVersion 36
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
@@ -9,7 +10,7 @@ android {
             aidl.srcDirs = ['src']
             renderscript.srcDirs = ['src']
             res.srcDirs = ['res']
-            assets.srcDirs = ['assets']
+            assets.srcDirs = ['../assets']
             jniLibs.srcDirs = ['libs']
         }
 
@@ -20,7 +21,7 @@ android {
     defaultConfig {
         applicationId "theopalgames.tanks"
         minSdkVersion 26
-        targetSdkVersion 35
+        targetSdkVersion 36
         versionCode 4
         versionName "1.6.0"
     }
@@ -34,6 +35,20 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+}
+
+configurations { natives }
+
+dependencies {
+    implementation project(':core')
+    api "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+
+    implementation "androidx.documentfile:documentfile:1.1.0"
+    implementation "com.google.android.material:material:1.14.0"
 }
 
 
